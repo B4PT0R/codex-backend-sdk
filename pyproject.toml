@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "codex-backend-sdk"
+version = "0.1.0"
+description = "Unofficial Python SDK for the ChatGPT Codex backend API"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+keywords = ["openai", "codex", "chatgpt", "llm", "sdk"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "requests>=2.28",
+]
+
+[project.optional-dependencies]
+examples  = ["pyyaml>=6.0"]
+openai    = ["openai>=1.0"]
+dev       = ["pytest>=7.0", "pyyaml>=6.0", "openai>=1.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["codex_backend_sdk"]

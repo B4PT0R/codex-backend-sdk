@@ -40,7 +40,7 @@ client = CodexClient().authenticate()
 - **Tokens stale** → silently refreshed in the background
 - **No valid tokens available** → opens your browser for the OAuth flow (blocking, first run only)
 
-Tokens are saved to `~/.codex/auth.json` and shared with the official Codex CLI.
+Tokens are saved to `~/.codex/auth.json` (created if it doesn't exist). If the official Codex CLI is also installed, both share the same file.
 
 `CodexClient.from_saved_tokens()` is a shorthand for the same call.
 

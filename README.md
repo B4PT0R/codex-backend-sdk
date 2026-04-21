@@ -29,19 +29,20 @@ pip install pyyaml
 
 ## Authentication
 
-The first time, run the OAuth flow. It opens your browser, handles the PKCE callback, and saves tokens to `~/.codex/auth.json`.
-
 ```python
 from codex_backend_sdk import CodexClient
 
 client = CodexClient().authenticate()
 ```
 
-On subsequent runs, load saved tokens directly:
+`authenticate()` handles everything automatically:
+- **Tokens present and fresh** → used directly, no network call
+- **Tokens stale** → silently refreshed in the background
+- **No tokens or refresh fails** → opens your browser for the OAuth flow (blocking, first run only)
 
-```python
-client = CodexClient.from_saved_tokens()
-```
+Tokens are saved to `~/.codex/auth.json` and shared with the official Codex CLI.
+
+`CodexClient.from_saved_tokens()` is a shorthand for the same call.
 
 ---
 

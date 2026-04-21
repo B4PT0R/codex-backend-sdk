@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+.env
+.venv/
+venv/
+.pytest_cache/
+.claude/settings.local.json

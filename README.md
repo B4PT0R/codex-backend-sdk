@@ -38,7 +38,7 @@ client = CodexClient().authenticate()
 `authenticate()` handles everything automatically:
 - **Tokens present and fresh** → used directly, no network call
 - **Tokens stale** → silently refreshed in the background
-- **No tokens or refresh fails** → opens your browser for the OAuth flow (blocking, first run only)
+- **No valid tokens available** → opens your browser for the OAuth flow (blocking, first run only)
 
 Tokens are saved to `~/.codex/auth.json` and shared with the official Codex CLI.
 

@@ -44,6 +44,8 @@ Tokens are saved to `~/.codex/auth.json` and shared with the official Codex CLI.
 
 `CodexClient.from_saved_tokens()` is a shorthand for the same call.
 
+All other methods (`stream()`, `respond()`, `list_models()`, …) raise immediately if `authenticate()` was not called — they never trigger the OAuth flow implicitly.
+
 ---
 
 ## Basic usage

@@ -1,5 +1,5 @@
 """
-codex-sdk — Unofficial Python SDK for the ChatGPT Codex backend API.
+codex-backend-sdk — Unofficial Python SDK for the ChatGPT Codex backend API.
 
 DISCLAIMER: This is an independent, community-maintained library that
 reverse-engineers undocumented endpoints of chatgpt.com. It is not
@@ -8,7 +8,7 @@ to OpenAI's Terms of Use (https://openai.com/policies/terms-of-use).
 Endpoints may change or break without notice.
 
 Quickstart:
-    from codex_sdk import CodexClient
+    from codex_backend_sdk import CodexClient
 
     client = CodexClient().authenticate()   # opens browser on first run
     # subsequent runs load & refresh tokens automatically
@@ -27,7 +27,6 @@ from .codex_client import (
     Verbosity,
     ServiceTier,
     CodexClient,
-    client_from_saved_tokens,
     ModelInfo,
     ReasoningLevel,
     TextDelta,
@@ -48,7 +47,6 @@ __all__ = [
     "ReasoningSummary",
     "Verbosity",
     "ServiceTier",
-    "client_from_saved_tokens",
     "ModelInfo",
     "ReasoningLevel",
     "TextDelta",

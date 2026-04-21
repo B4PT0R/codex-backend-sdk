@@ -2,7 +2,7 @@
 
 Unofficial Python SDK for the ChatGPT Codex backend API (`chatgpt.com/backend-api/codex`).
 
-This is a **lower-level** alternative to the official Codex CLI. It gives direct access to the HTTP API so you can build your own agent loop without inheriting OpenAI's design choices.
+This is a **lower-level** alternative to the official Codex CLI/SDK. It gives direct access to the HTTP API endpoints on which the CLI relies, so you can build your own agent loop from scratch without inheriting OpenAI's design choices.
 
 > **Requirements:** a ChatGPT Plus, Pro, or Enterprise subscription. No OpenAI API key and no Codex CLI installation needed — authentication goes through ChatGPT OAuth directly from Python.
 
@@ -42,8 +42,6 @@ client = CodexClient().authenticate()
 
 Tokens are saved to `~/.codex/auth.json` (created if it doesn't exist). If the official Codex CLI is also installed, both share the same file.
 
-`CodexClient.from_saved_tokens()` is a shorthand for the same call.
-
 All other methods (`stream()`, `respond()`, `list_models()`, …) raise immediately if `authenticate()` was not called — they never trigger the OAuth flow implicitly.
 
 ---
@@ -53,7 +51,7 @@ All other methods (`stream()`, `respond()`, `list_models()`, …) raise immediat
 ```python
 from codex_backend_sdk import CodexClient, TextDelta, ResponseCompleted
 
-client = CodexClient.from_saved_tokens()
+client = CodexClient().authenticate()
 
 for event in client.stream("Explain quicksort in one paragraph"):
     if isinstance(event, TextDelta):
@@ -116,7 +114,7 @@ Tool definitions follow the same format as the official OpenAI SDK.
 import json
 from codex_backend_sdk import CodexClient, TextDelta, ToolCall, ResponseCompleted
 
-client = CodexClient.from_saved_tokens()
+client = CodexClient().authenticate()
 
 tools = [
     {

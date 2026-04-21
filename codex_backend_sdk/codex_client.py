@@ -438,42 +438,6 @@ class CodexClient:
         self._session.headers.update(self._auth_headers())
         return self
 
-    @classmethod
-    def from_saved_tokens(
-        cls,
-        *,
-        model: str = "gpt-5.4",
-        instructions: str = "",
-        reasoning: Optional[ReasoningEffort] = None,
-        reasoning_summary: Optional[ReasoningSummary] = None,
-        verbosity: Optional[Verbosity] = None,
-        web_search: Optional[str] = None,
-        service_tier: Optional[ServiceTier] = None,
-        parallel_tool_calls: bool = False,
-        tools: Optional[list[dict]] = None,
-        persist: bool = False,
-        include_reasoning: bool = False,
-    ) -> "CodexClient":
-        """
-        Shorthand for ``CodexClient(...).authenticate()``.
-
-        Loads saved tokens, refreshes if expired, or runs the OAuth flow
-        if no tokens exist. Accepts the same session-level default kwargs as __init__.
-        """
-        return cls(
-            model=model,
-            instructions=instructions,
-            reasoning=reasoning,
-            reasoning_summary=reasoning_summary,
-            verbosity=verbosity,
-            web_search=web_search,
-            service_tier=service_tier,
-            parallel_tool_calls=parallel_tool_calls,
-            tools=tools,
-            persist=persist,
-            include_reasoning=include_reasoning,
-        ).authenticate()
-
     def _ensure_auth(self) -> None:
         if not self._store or not self._store.account_id:
             raise RuntimeError(
@@ -898,10 +862,3 @@ def _dispatch_sse_event(
     return None
 
 
-# ---------------------------------------------------------------------------
-# Back-compat alias
-# ---------------------------------------------------------------------------
-
-def client_from_saved_tokens() -> CodexClient:
-    """Alias for CodexClient.from_saved_tokens()."""
-    return CodexClient.from_saved_tokens()

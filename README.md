@@ -14,14 +14,8 @@ This is a **lower-level** alternative to the official Codex CLI. It gives direct
 ## Installation
 
 ```bash
-pip install codex-backend-sdk
-```
-
-Or from source:
-
-```bash
-git clone <repo>
-cd codex
+git clone https://github.com/B4PT0R/codex-backend-sdk.git
+cd codex-backend-sdk
 pip install -e .
 ```
 

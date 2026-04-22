@@ -2,7 +2,7 @@
 
 Unofficial Python SDK for the ChatGPT Codex backend API (`chatgpt.com/backend-api/codex`).
 
-This is a **lower-level** alternative to the official Codex CLI/SDK. It gives direct access to the HTTP API endpoints on which the CLI relies, so you can build your own agent loop from scratch without inheriting OpenAI's design choices.
+This is a **lower-level** alternative to the official Codex CLI/SDK. It gives direct access to the underlying HTTP API endpoints on which the CLI relies, so you can build your own agent loop from scratch without inheriting OpenAI's design choices.
 
 > **Requirements:** a ChatGPT Plus, Pro, or Enterprise subscription. No OpenAI API key and no Codex CLI installation needed — authentication goes through ChatGPT OAuth directly from Python.
 

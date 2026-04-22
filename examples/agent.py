@@ -4,8 +4,7 @@ Agent — interactive agent loop built on codex_backend_sdk.
 
 Features
 --------
-- @tool decorator  : annotate any function; tool spec lives in a YAML docstring
-- Agent.register   : attach tools to an agent (also works as a decorator)
+- @agent.tool      : register a function as a tool; spec lives in its YAML docstring
 - Agent.interact   : multi-turn REPL with automatic tool dispatch and re-prompting
 - Reasoning        : pass reasoning= / reasoning_summary= to the constructor
 - Parallel tools   : the model may call several tools in one pass
@@ -23,12 +22,12 @@ Docstring format (YAML)
 Quick start
 -----------
     from codex_backend_sdk import CodexClient
-    from examples.agent import Agent, tool
+    from examples.agent import Agent
 
-    client = CodexClient.from_saved_tokens()
+    client = CodexClient().authenticate()
     agent  = Agent(client, reasoning="low")
 
-    @agent.register
+    @agent.tool
     def calculator(expression: str) -> dict:
         \"\"\"
         description: Evaluate a Python arithmetic expression.
@@ -60,51 +59,6 @@ from codex_backend_sdk import (
     TextDelta,
     ToolCall,
 )
-
-
-# ---------------------------------------------------------------------------
-# @tool decorator
-# ---------------------------------------------------------------------------
-
-def tool(func: Callable) -> Callable:
-    """Mark a function as an agent tool; spec is read from its YAML docstring."""
-    doc = inspect.getdoc(func)
-    if not doc:
-        raise ValueError(f"@tool: {func.__name__} must have a docstring")
-
-    try:
-        spec = yaml.safe_load(doc)
-    except yaml.YAMLError as exc:
-        raise ValueError(f"@tool: {func.__name__} docstring is not valid YAML") from exc
-
-    if not isinstance(spec, dict):
-        raise ValueError(f"@tool: {func.__name__} docstring must be a YAML mapping")
-
-    name = str(spec.get("name", func.__name__))
-    description = str(spec.get("description", ""))
-    required = list(spec.get("required", []))
-
-    properties: dict[str, dict] = {}
-    for param_name, meta in (spec.get("parameters") or {}).items():
-        prop: dict[str, Any] = {}
-        for key in ("type", "description", "enum", "items", "default"):
-            if key in meta:
-                prop[key] = meta[key]
-        properties[param_name] = prop
-
-    func._tool_name = name  # type: ignore[attr-defined]
-    func._tool_definition = {  # type: ignore[attr-defined]
-        "type": "function",
-        "name": name,
-        "description": description,
-        "parameters": {
-            "type": "object",
-            "properties": properties,
-            "required": required,
-            "additionalProperties": False,
-        },
-    }
-    return func
 
 
 # ---------------------------------------------------------------------------
@@ -161,23 +115,52 @@ class Agent:
     # Tool registration
     # ------------------------------------------------------------------
 
-    def register(self, func: Callable) -> Callable:
+    def tool(self, func: Callable) -> Callable:
         """
-        Attach a @tool-decorated function to this agent.
-        Can be used as a plain decorator:
+        Register a function as a tool for this agent.  Use as a decorator:
 
-            @agent.register
+            @agent.tool
             def my_tool(...): ...
+
+        The function's docstring must be a YAML mapping with keys:
+        description, parameters, required.
         """
-        if not hasattr(func, "_tool_definition"):
-            raise ValueError(
-                f"{func.__name__} must be decorated with @tool before registering"
-            )
-        name: str = func._tool_name
+        doc = inspect.getdoc(func)
+        if not doc:
+            raise ValueError(f"@agent.tool: {func.__name__} must have a docstring")
+        try:
+            spec = yaml.safe_load(doc)
+        except yaml.YAMLError as exc:
+            raise ValueError(f"@agent.tool: {func.__name__} docstring is not valid YAML") from exc
+        if not isinstance(spec, dict):
+            raise ValueError(f"@agent.tool: {func.__name__} docstring must be a YAML mapping")
+
+        name = str(spec.get("name", func.__name__))
+        description = str(spec.get("description", ""))
+        required = list(spec.get("required", []))
+
+        properties: dict[str, dict] = {}
+        for param_name, meta in (spec.get("parameters") or {}).items():
+            prop: dict[str, Any] = {}
+            for key in ("type", "description", "enum", "items", "default"):
+                if key in meta:
+                    prop[key] = meta[key]
+            properties[param_name] = prop
+
         if name in self._tools:
             raise ValueError(f"Tool '{name}' is already registered")
         self._tools[name] = func
-        self._tool_defs.append(func._tool_definition)
+        self._tool_defs.append({
+            "type": "function",
+            "name": name,
+            "description": description,
+            "parameters": {
+                "type": "object",
+                "properties": properties,
+                "required": required,
+                "additionalProperties": False,
+            },
+        })
         return func
 
     # ------------------------------------------------------------------
@@ -303,7 +286,7 @@ class Agent:
 if __name__ == "__main__":
     import math
 
-    client = CodexClient.from_saved_tokens()
+    client = CodexClient().authenticate()
     print(f"Authenticated as: {client._store.email}\n")
 
     agent = Agent(
@@ -318,7 +301,7 @@ if __name__ == "__main__":
 
     # ------------------------------------------------------------------ tools
 
-    @agent.register
+    @agent.tool
     def calculator(expression: str) -> dict:
         """
         description: Evaluate a safe Python arithmetic expression and return the result.
@@ -336,7 +319,7 @@ if __name__ == "__main__":
         except Exception as exc:  # noqa: BLE001
             return {"error": str(exc)}
 
-    @agent.register
+    @agent.tool
     def get_weather(city: str, unit: str = "celsius") -> dict:
         """
         description: Get the current weather for a given city (fake data for demo).

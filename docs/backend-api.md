@@ -1,7 +1,7 @@
 # Codex Backend API — Reverse-Engineering Notes
 
 Sourced from live observation and `codex-rs` source (`openai/codex`).  
-Last updated: 2026-04-20.
+Last updated: 2026-04-22.
 
 ---
 
@@ -101,10 +101,31 @@ Key fields:
 | `parallel_tool_calls` | bool | |
 | `reasoning` | object? | `{ "effort": "low"\|"medium"\|"high"\|"xhigh", "summary": "concise"\|"detailed"\|"auto" }` |
 | `text.format` | object | `{"type": "text"}` or `{"type": "json_schema", "name": "...", "schema": {...}, "strict": true}` |
-| `store` | bool | Persist response server-side |
-| `service_tier` | string? | `"flex"` (higher throughput) / `"fast"` (lower latency) |
+| `store` | bool | Must be `false` |
+| `service_tier` | string? | `"priority"` is accepted; `"auto"` is rejected |
 | `prompt_cache_key` | string? | UUID for shared prompt cache across calls |
 | `include` | list? | Include extra fields, e.g. `["reasoning.encrypted_content"]` |
+
+**Prompt cache retention**
+
+`prompt_cache_retention` is not accepted as a request parameter on this
+endpoint. Sending either `"in_memory"` or `"24h"` returns:
+
+```json
+{"detail":"Unsupported parameter: prompt_cache_retention"}
+```
+
+Successful SSE events currently still report:
+
+```json
+"prompt_cache_retention": "24h"
+```
+
+This appears to be a backend-selected Codex policy rather than a client
+configuration knob. It is important for long sessions: with stable
+instructions, tools, schemas, and early conversation prefix, the 24h retention
+can preserve prompt-cache hits across much longer idle gaps than default
+in-memory prompt caching.
 
 **Web search** (added to request when enabled):
 ```json
@@ -304,6 +325,12 @@ Returned verbatim from `response.output_item.done` with `item.type = "function_c
 ## Known limitations / quirks
 
 - `stream: true` is **mandatory** — there is no sync endpoint.
+- `store: false` is **mandatory**; `store: true` returns a 400.
+- `prompt_cache_retention` is server-selected (`"24h"` observed in SSE events)
+  and rejected if sent in the request body.
+- Public Responses API fields such as `temperature`, `top_p`,
+  `max_output_tokens`, `metadata`, `user`, `safety_identifier`, `truncation`,
+  penalties, and `previous_response_id` are rejected as unsupported parameters.
 - `tool_choice` field is **required** when `tools` is non-empty (omitting it causes a 400).
 - `realtime/calls` — 404, not deployed on chatgpt.com backend.
 - `memories/trace_summarize` — 403 on Plus; Pro/Enterprise only.

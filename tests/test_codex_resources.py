@@ -1,4 +1,4 @@
-from codex_backend_sdk import OpenAI
+from codex_backend_sdk import MemorySummarizeResponse, OpenAI, RawMemory
 
 
 class FakeCodexClient(OpenAI):
@@ -41,7 +41,9 @@ class FakeCodexClient(OpenAI):
     def _post(self, path, *, body, stream=False):
         self.posts.append((path, body, stream))
         if path == "/memories/trace_summarize":
-            return FakeJSONResponse({"output": [{"memory_summary": "summary"}]})
+            return FakeJSONResponse({
+                "output": [{"trace_summary": "raw", "memory_summary": "summary"}]
+            })
         raise AssertionError(f"Unexpected Codex post path: {path}")
 
 
@@ -77,16 +79,18 @@ def test_codex_memories_trace_summarize_posts_codex_payload():
     response = client.codex.memories.trace_summarize(
         model="gpt-test",
         traces=[
-            {
-                "id": "trace_1",
-                "metadata": {"source_path": "/tmp/memory.jsonl"},
-                "items": [{"type": "message", "content": "remember me"}],
-            }
+            RawMemory(
+                id="trace_1",
+                metadata={"source_path": "/tmp/memory.jsonl"},
+                items=[{"type": "message", "content": "remember me"}],
+            )
         ],
         reasoning={"effort": "low"},
     )
 
-    assert response == {"output": [{"memory_summary": "summary"}]}
+    assert isinstance(response, MemorySummarizeResponse)
+    assert response.output[0].raw_memory == "raw"
+    assert response.output[0].memory_summary == "summary"
     assert client.posts == [
         (
             "/memories/trace_summarize",

@@ -244,10 +244,11 @@ as opaque backend state.
 
 `client.models.list()` and `client.models.retrieve(model)` mirror the official
 OpenAI models resource, while preserving Codex-specific metadata as extra
-Pydantic fields.
+Pydantic fields. The returned page also exposes the backend `ETag` when present.
 
 ```python
 models = client.models.list()
+print(models.etag)
 for model in models:
     print(
         model.id,
@@ -387,22 +388,28 @@ These methods return raw backend dictionaries because these payloads can contain
 personal account-specific fields and may change without notice.
 
 `client.codex.memories.trace_summarize(...)` exposes the Codex memory
-summarization endpoint used by the official client. It returns the raw backend
-dictionary:
+summarization endpoint used by the official client. It accepts dictionaries or
+`RawMemory` objects and returns a typed `MemorySummarizeResponse`:
 
 ```python
+from codex_backend_sdk import RawMemory
+
 summary = client.codex.memories.trace_summarize(
     model="gpt-5.4",
     traces=[
-        {
-            "id": "trace_1",
-            "metadata": {"source_path": "memory.jsonl"},
-            "items": [{"type": "message", "content": "Remember this"}],
-        }
+        RawMemory(
+            id="trace_1",
+            metadata={"source_path": "memory.jsonl"},
+            items=[{"type": "message", "content": "Remember this"}],
+        )
     ],
     reasoning={"effort": "low"},
 )
+print(summary.output[0].memory_summary)
 ```
+
+Transient HTTP failures (`429`, `5xx`, timeouts, and connection errors) are
+retried by default. Configure this with `OpenAI(max_retries=..., retry_base_delay=...)`.
 
 ### File Uploads
 

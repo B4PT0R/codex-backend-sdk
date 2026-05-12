@@ -47,6 +47,9 @@ List models available to this account.
 
 **Response** — JSON `{ "models": [ ModelObject, … ] }`
 
+The backend may include an `ETag` header. The SDK preserves it as
+`client.models.list().etag`.
+
 Key fields per model:
 | Field | Type | Notes |
 |---|---|---|
@@ -228,8 +231,8 @@ Summarize traces into persistent memories.
 
 **SDK method**: `client.codex.memories.trace_summarize(...)`
 
-**Status**: Supported as a raw helper. May return `403 Forbidden` depending on
-plan/account capabilities.
+**Status**: Supported as a typed helper. May return `403 Forbidden` depending
+on plan/account capabilities.
 
 **Request body**:
 ```json
@@ -246,7 +249,8 @@ plan/account capabilities.
 }
 ```
 
-**Response** — raw JSON, typically `{ "output": [...] }`.
+**Response** — JSON `{ "output": [...] }`, exposed by the SDK as
+`MemorySummarizeResponse`.
 
 ---
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import urllib.parse
+import time
 from typing import Any, Optional
 
 import requests
@@ -32,6 +33,8 @@ class CodexClient:
         model: str = "gpt-5.4",
         instructions: Optional[str] = None,
         timeout: float = 120,
+        max_retries: int = 2,
+        retry_base_delay: float = 0.25,
     ) -> None:
         from .resources.codex import CodexResources
         from .resources.models import Models
@@ -42,6 +45,8 @@ class CodexClient:
 
         self._store = store
         self._timeout = timeout
+        self._max_retries = max_retries
+        self._retry_base_delay = retry_base_delay
         self._session = requests.Session()
         self._defaults = {
             "model": model,
@@ -121,14 +126,30 @@ class CodexClient:
             return False
 
     def _get(self, path: str, *, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+        return self._get_raw(path, params=params).json()
+
+    def _get_raw(
+        self,
+        path: str,
+        *,
+        params: Optional[dict[str, Any]] = None,
+        headers: Optional[dict[str, str]] = None,
+        timeout: Any = _UNSET,
+    ) -> requests.Response:
         self._ensure_auth()
-        response = self._session.get(f"{BASE_URL}{path}", params=params, timeout=self._timeout)
-        response.raise_for_status()
-        return response.json()
+        response = self._request_with_retries(
+            "GET",
+            f"{BASE_URL}{path}",
+            params=params,
+            headers=headers,
+            timeout=self._timeout if not _is_given(timeout) else timeout,
+        )
+        return response
 
     def _post(self, path: str, *, body: dict[str, Any], stream: bool = False) -> requests.Response:
         self._ensure_auth()
-        response = self._session.post(
+        response = self._request_with_retries(
+            "POST",
             f"{BASE_URL}{path}",
             json=body,
             headers={"Accept": "text/event-stream"} if stream else None,
@@ -151,7 +172,8 @@ class CodexClient:
         timeout: Any = _UNSET,
     ) -> requests.Response:
         self._ensure_auth()
-        response = self._session.post(
+        response = self._request_with_retries(
+            "POST",
             f"{BASE_URL}{path}",
             json=body if files is None and data is None and content is None else None,
             data=content if content is not None else data,
@@ -178,12 +200,14 @@ class CodexClient:
         params: Optional[dict[str, Any]] = None,
         timeout: Any = _UNSET,
     ) -> dict[str, Any]:
-        response = requests.post(
+        response = self._request_with_retries(
+            "POST",
             f"{OPENAI_BASE_URL}{path}",
             json=body,
             headers=self._openai_headers(headers),
             params=params,
             timeout=self._timeout if not _is_given(timeout) else timeout,
+            _use_session=False,
         )
         response.raise_for_status()
         return response.json()
@@ -200,7 +224,8 @@ class CodexClient:
         timeout: Any = _UNSET,
         stream: bool = False,
     ) -> requests.Response:
-        response = requests.post(
+        response = self._request_with_retries(
+            "POST",
             f"{OPENAI_BASE_URL}{path}",
             json=body if files is None and data is None else None,
             data=data,
@@ -209,20 +234,24 @@ class CodexClient:
             params=params,
             stream=stream,
             timeout=self._timeout if not _is_given(timeout) else timeout,
+            _use_session=False,
         )
         response.raise_for_status()
         return response
 
     def _get_wham(self, path: str, *, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         self._ensure_auth()
-        response = self._session.get(f"{WHAM_BASE_URL}{path}", params=params, timeout=30)
-        response.raise_for_status()
+        response = self._request_with_retries(
+            "GET",
+            f"{WHAM_BASE_URL}{path}",
+            params=params,
+            timeout=30,
+        )
         return response.json()
 
     def _get_chatgpt(self, path: str) -> dict[str, Any]:
         self._ensure_auth()
-        response = self._session.get(f"{CHATGPT_BASE_URL}{path}", timeout=30)
-        response.raise_for_status()
+        response = self._request_with_retries("GET", f"{CHATGPT_BASE_URL}{path}", timeout=30)
         return response.json()
 
     def _post_chatgpt(
@@ -233,13 +262,46 @@ class CodexClient:
         timeout: Any = _UNSET,
     ) -> dict[str, Any]:
         self._ensure_auth()
-        response = self._session.post(
+        response = self._request_with_retries(
+            "POST",
             f"{CHATGPT_BASE_URL}{path}",
             json=body,
             timeout=self._timeout if not _is_given(timeout) else timeout,
         )
-        response.raise_for_status()
         return response.json()
+
+    def _request_with_retries(self, method: str, url: str, **kwargs: Any) -> requests.Response:
+        last_error: requests.RequestException | None = None
+        use_session = kwargs.pop("_use_session", True)
+        for attempt in range(self._max_retries + 1):
+            try:
+                request = self._session.request if use_session else requests.request
+                response = request(method, url, **kwargs)
+                if self._should_retry_response(response, attempt):
+                    self._sleep_before_retry(response, attempt)
+                    continue
+                response.raise_for_status()
+                return response
+            except (requests.Timeout, requests.ConnectionError) as exc:
+                last_error = exc
+                if attempt >= self._max_retries:
+                    raise
+                self._sleep_before_retry(None, attempt)
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("Request retry loop exhausted")
+
+    def _should_retry_response(self, response: requests.Response, attempt: int) -> bool:
+        if attempt >= self._max_retries:
+            return False
+        return response.status_code == 429 or 500 <= response.status_code < 600
+
+    def _sleep_before_retry(self, response: requests.Response | None, attempt: int) -> None:
+        retry_after = response.headers.get("Retry-After") if response is not None else None
+        delay = _parse_retry_after(retry_after)
+        if delay is None:
+            delay = self._retry_base_delay * (2 ** attempt)
+        time.sleep(delay)
 
     def realtime_websocket_url(self, *, model: str) -> str:
         """Return the official OpenAI Realtime WebSocket URL for Codex plugins."""
@@ -262,3 +324,12 @@ class CodexClient:
 
 
 OpenAI = CodexClient
+
+
+def _parse_retry_after(value: str | None) -> float | None:
+    if not value:
+        return None
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        return None

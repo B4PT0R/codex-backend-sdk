@@ -17,7 +17,7 @@ Quickstart:
     print(response.output_text)
 """
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 from .oauth import run_oauth_flow, refresh_access_token, obtain_api_key
 from .storage import load_tokens, save_tokens, TokenStore
@@ -33,7 +33,11 @@ from .codex_client import (
     Verbosity,
     CodexClient,
     OpenAI,
+    MemorySummarizeOutput,
+    MemorySummarizeResponse,
     Model,
+    RawMemory,
+    RawMemoryMetadata,
     Response,
     ResponseStreamEvent,
     ResponseUsage,
@@ -54,7 +58,11 @@ __all__ = [
     "CreateEmbeddingResponse",
     "Embedding",
     "EmbeddingUsage",
+    "MemorySummarizeOutput",
+    "MemorySummarizeResponse",
     "Model",
+    "RawMemory",
+    "RawMemoryMetadata",
     "Response",
     "ResponseStreamEvent",
     "ResponseUsage",

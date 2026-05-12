@@ -36,10 +36,11 @@ class Models:
             if time.time() - self._cache_fetched_at <= _CACHE_TTL:
                 return self._cache
 
-        data = self._client._get("/models", params={"client_version": CLIENT_VERSION})
+        response = self._client._get_raw("/models", params={"client_version": CLIENT_VERSION})
+        data = response.json()
         models = [_model_from_backend(item) for item in data.get("models", [])]
         models.sort(key=lambda model: getattr(model, "priority", 0))
-        page = SyncPage(data=models)
+        page = SyncPage(data=models, etag=response.headers.get("ETag"))
         self._cache = page
         self._cache_fetched_at = time.time()
         return page

@@ -173,6 +173,25 @@ class Transcription(CodexBaseModel):
     text: str = ""
 
 
+class RawMemoryMetadata(CodexBaseModel):
+    source_path: str
+
+
+class RawMemory(CodexBaseModel):
+    id: str
+    metadata: RawMemoryMetadata
+    items: list[Any] = Field(default_factory=list)
+
+
+class MemorySummarizeOutput(CodexBaseModel):
+    raw_memory: str = Field(default="", alias="trace_summary")
+    memory_summary: str = ""
+
+
+class MemorySummarizeResponse(CodexBaseModel):
+    output: list[MemorySummarizeOutput] = Field(default_factory=list)
+
+
 class UploadedFile(CodexBaseModel):
     file_id: str
     uri: str

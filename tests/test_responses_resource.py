@@ -15,8 +15,9 @@ class FakeSSE:
 
 
 class FakeJSONResponse:
-    def __init__(self, payload):
+    def __init__(self, payload, headers=None):
         self._payload = payload
+        self.headers = headers or {}
 
     def json(self):
         return self._payload
@@ -47,28 +48,31 @@ class FakeClient(OpenAI):
             ),
         ])
 
-    def _get(self, path, *, params=None):
+    def _get_raw(self, path, *, params=None, headers=None, timeout=None):
         self.gets.append((path, params))
-        return {
-            "models": [
-                {
-                    "slug": "gpt-lower-priority",
-                    "display_name": "GPT Lower Priority",
-                    "description": "Test model",
-                    "context_window": 123,
-                    "supported_in_api": True,
-                    "priority": 7,
-                },
-                {
-                    "slug": "gpt-test",
-                    "display_name": "GPT Test",
-                    "description": "Test model",
-                    "context_window": 456,
-                    "supported_in_api": True,
-                    "priority": 1,
-                }
-            ]
-        }
+        return FakeJSONResponse(
+            {
+                "models": [
+                    {
+                        "slug": "gpt-lower-priority",
+                        "display_name": "GPT Lower Priority",
+                        "description": "Test model",
+                        "context_window": 123,
+                        "supported_in_api": True,
+                        "priority": 7,
+                    },
+                    {
+                        "slug": "gpt-test",
+                        "display_name": "GPT Test",
+                        "description": "Test model",
+                        "context_window": 456,
+                        "supported_in_api": True,
+                        "priority": 1,
+                    },
+                ]
+            },
+            headers={"ETag": "models-etag"},
+        )
 
 
 def test_responses_create_collects_to_pydantic_response():
@@ -147,6 +151,7 @@ def test_models_resource_returns_iterable_page():
     assert len(page) == 2
     assert model.id == "gpt-test"
     assert model.context_window == 456
+    assert page.etag == "models-etag"
     assert client.models.retrieve("gpt-test").id == "gpt-test"
     assert len(client.gets) == 1
 

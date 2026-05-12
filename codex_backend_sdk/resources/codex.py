@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING
 
+from .._models import MemorySummarizeResponse
+from .._utils import _jsonable
+
 if TYPE_CHECKING:
     from .._client import CodexClient
 
@@ -36,15 +39,17 @@ class CodexMemories:
         self,
         *,
         model: str,
-        traces: list[dict[str, Any]],
-        reasoning: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+        traces: list[Any],
+        reasoning: Any = None,
+    ) -> MemorySummarizeResponse:
         if not model:
             raise ValueError(f"Expected a non-empty value for `model` but received {model!r}")
-        payload: dict[str, Any] = {"model": model, "traces": traces}
+        payload: dict[str, Any] = {"model": model, "traces": _jsonable(traces)}
         if reasoning is not None:
-            payload["reasoning"] = reasoning
-        return self._client._post("/memories/trace_summarize", body=payload).json()
+            payload["reasoning"] = _jsonable(reasoning)
+        return MemorySummarizeResponse.model_validate(
+            self._client._post("/memories/trace_summarize", body=payload).json()
+        )
 
 
 class CodexConfig:

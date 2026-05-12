@@ -158,17 +158,20 @@ resources (`responses`, `models`, `realtime`) or Codex-only resources (`codex`).
 |---|---|---|
 | `POST /backend-api/codex/responses` | `client.responses.create(...)` | Stream-only backend; non-streaming SDK calls are collected from SSE events. |
 | `POST /backend-api/codex/responses/compact` | `client.responses.compact(...)` | Codex-specific helper for encrypted context compaction. |
+| `POST /backend-api/codex/memories/trace_summarize` | `client.codex.memories.trace_summarize(...)` | Raw Codex memory trace summarization helper. |
 | `GET /backend-api/codex/models` | `client.models.list()` / `client.models.retrieve(...)` | OpenAI-shaped model objects with Codex metadata preserved as extra fields. |
 | `POST /backend-api/codex/realtime/calls` | `client.realtime.calls.create(...)` | OpenAI-shaped SDP call creation for realtime sessions. |
 | `wss://api.openai.com/v1/realtime?model=...` | `client.realtime_websocket_url(...)` / `client.realtime_websocket_headers(...)` | Helper surface used by codex-agent's realtime plugin. |
 | `POST /v1/embeddings` | `client.embeddings.create(...)` | Uses the Codex OAuth access token against `api.openai.com`; verified with `text-embedding-3-small`. |
 | `POST /v1/audio/transcriptions` | `client.audio.transcriptions.create(...)` | Uses the Codex OAuth access token against `api.openai.com`; verified with `gpt-4o-mini-transcribe`. |
 | `GET /backend-api/wham/usage` | `client.codex.usage()` | Codex/ChatGPT quota and rate-limit status. |
+| `GET /backend-api/wham/config/requirements` | `client.codex.config.requirements()` | Raw managed requirements/config payload for the authenticated account. |
 | `GET /backend-api/wham/tasks/list` | `client.codex.tasks.list(...)` | Raw Codex cloud task listing. |
 | `GET /backend-api/wham/tasks/{task_id}` | `client.codex.tasks.retrieve(task_id)` | Raw Codex cloud task detail. |
 | `GET /backend-api/wham/tasks/{task_id}/turns` | `client.codex.tasks.turns.list(task_id)` | Raw task turn mapping. |
 | `GET /backend-api/wham/tasks/{task_id}/turns/{turn_id}/sibling_turns` | `client.codex.tasks.turns.sibling_turns(task_id, turn_id)` | Raw sibling turn list. |
 | `GET /backend-api/wham/environments` | `client.codex.environments.list()` | Raw Codex cloud environment list. |
+| `POST /backend-api/files` + signed upload | `client.files.upload(...)` | Uploads local files for Codex Apps/MCP file parameters and returns `sediment://...` metadata. |
 | `GET /backend-api/memories` | `client.codex.memories.list()` | Raw ChatGPT memory payload for the authenticated account. |
 | `GET /backend-api/user_system_messages` | `client.codex.user_system_messages.retrieve()` | Raw ChatGPT customization/system-message payload. |
 
@@ -377,10 +380,40 @@ not part of the official OpenAI SDK.
 ```python
 memories = client.codex.memories.list()
 customization = client.codex.user_system_messages.retrieve()
+requirements = client.codex.config.requirements()
 ```
 
-Both methods return raw backend dictionaries because these payloads can contain
+These methods return raw backend dictionaries because these payloads can contain
 personal account-specific fields and may change without notice.
+
+`client.codex.memories.trace_summarize(...)` exposes the Codex memory
+summarization endpoint used by the official client. It returns the raw backend
+dictionary:
+
+```python
+summary = client.codex.memories.trace_summarize(
+    model="gpt-5.4",
+    traces=[
+        {
+            "id": "trace_1",
+            "metadata": {"source_path": "memory.jsonl"},
+            "items": [{"type": "message", "content": "Remember this"}],
+        }
+    ],
+    reasoning={"effort": "low"},
+)
+```
+
+### File Uploads
+
+`client.files.upload(...)` follows the official Codex file flow for Apps/MCP
+file parameters: create file metadata under ChatGPT, upload bytes to the signed
+URL, then finalize the upload.
+
+```python
+uploaded = client.files.upload("report.csv")
+print(uploaded.uri)  # sediment://file_...
+```
 
 ### Observed But Not Exposed
 
@@ -388,7 +421,5 @@ The reverse-engineering notes in `docs/backend-api.md` include additional
 observed endpoints. They are not exposed as SDK resources yet because they are
 plan-gated, unavailable on `chatgpt.com`, or not stable enough:
 
-- `POST /backend-api/codex/memories/trace_summarize`
-- `GET /backend-api/wham/config/requirements`
 - `POST /v1/audio/speech` (auth reaches the endpoint, but Pro OAuth lacks
   `api.model.audio.request` in current tests)

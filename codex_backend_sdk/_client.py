@@ -36,6 +36,7 @@ class CodexClient:
         from .resources.codex import CodexResources
         from .resources.models import Models
         from .resources.openai_oauth import Audio, Embeddings
+        from .resources.files import Files
         from .resources.realtime import Realtime
         from .resources.responses import Responses
 
@@ -53,6 +54,7 @@ class CodexClient:
         self.realtime = Realtime(self)
         self.embeddings = Embeddings(self)
         self.audio = Audio(self)
+        self.files = Files(self)
         self.codex = CodexResources(self)
 
     def authenticate(self, *, request_api_key: bool = True) -> "CodexClient":
@@ -140,6 +142,7 @@ class CodexClient:
         self,
         path: str,
         *,
+        body: Optional[dict[str, Any]] = None,
         content: Optional[bytes] = None,
         files: Any = None,
         data: Any = None,
@@ -150,7 +153,8 @@ class CodexClient:
         self._ensure_auth()
         response = self._session.post(
             f"{BASE_URL}{path}",
-            data=content if files is None else data,
+            json=body if files is None and data is None and content is None else None,
+            data=content if content is not None else data,
             files=files,
             headers=headers,
             params=params,
@@ -218,6 +222,22 @@ class CodexClient:
     def _get_chatgpt(self, path: str) -> dict[str, Any]:
         self._ensure_auth()
         response = self._session.get(f"{CHATGPT_BASE_URL}{path}", timeout=30)
+        response.raise_for_status()
+        return response.json()
+
+    def _post_chatgpt(
+        self,
+        path: str,
+        *,
+        body: dict[str, Any],
+        timeout: Any = _UNSET,
+    ) -> dict[str, Any]:
+        self._ensure_auth()
+        response = self._session.post(
+            f"{CHATGPT_BASE_URL}{path}",
+            json=body,
+            timeout=self._timeout if not _is_given(timeout) else timeout,
+        )
         response.raise_for_status()
         return response.json()
 

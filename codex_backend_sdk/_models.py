@@ -173,6 +173,16 @@ class Transcription(CodexBaseModel):
     text: str = ""
 
 
+class UploadedFile(CodexBaseModel):
+    file_id: str
+    uri: str
+    download_url: str
+    file_name: str
+    file_size_bytes: int
+    mime_type: Optional[str] = None
+    path: str
+
+
 class CompactedResponse(CodexBaseModel):
     id: str
     object: str = "response.compacted"

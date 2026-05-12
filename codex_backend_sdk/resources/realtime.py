@@ -1,8 +1,6 @@
 """Realtime resources."""
 
 from __future__ import annotations
-
-import json
 from typing import Any, Optional, TYPE_CHECKING
 
 from .._models import RealtimeCallResponse
@@ -51,17 +49,13 @@ class RealtimeCalls:
             )
             return RealtimeCallResponse(response)
 
-        files = [
-            ("sdp", (None, sdp.encode("utf-8"), "application/sdp")),
-            (
-                "session",
-                (None, json.dumps(_jsonable(session)).encode("utf-8"), "application/json"),
-            ),
-        ]
         response = self._client._post_raw(
             "/realtime/calls",
-            files=files,
-            data=extra_body,
+            body={
+                "sdp": sdp,
+                "session": _jsonable(session),
+                **(_jsonable(extra_body) if extra_body else {}),
+            },
             headers={"Accept": "application/sdp", **(extra_headers or {})},
             params=extra_query,
             timeout=timeout,

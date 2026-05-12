@@ -43,7 +43,7 @@ List models available to this account.
 **SDK method**: `client.models.list()` / `client.models.retrieve(model)`
 
 **Query params**
-- `client_version` — SDK/CLI version string (e.g. `"0.3.0"`).
+- `client_version` — Codex CLI protocol/client version string (e.g. `"0.130.0"`).
 
 **Response** — JSON `{ "models": [ ModelObject, … ] }`
 
@@ -193,7 +193,14 @@ Compact a long conversation into an encrypted summary the model can still read.
 ```json
 {
   "model": "gpt-5.4",
-  "input": [ /* full conversation history */ ]
+  "input": [ /* full conversation history */ ],
+  "instructions": "Compact the conversation.",
+  "tools": [],
+  "parallel_tool_calls": false,
+  "reasoning": { "effort": "medium" },
+  "service_tier": "priority",
+  "prompt_cache_key": "cache-key",
+  "text": { "verbosity": "low" }
 }
 ```
 
@@ -219,7 +226,27 @@ Compact a long conversation into an encrypted summary the model can still read.
 
 Summarize traces into persistent memories.
 
-**Status**: Returns `403 Forbidden` on Plus plan. Requires Pro or Enterprise.
+**SDK method**: `client.codex.memories.trace_summarize(...)`
+
+**Status**: Supported as a raw helper. May return `403 Forbidden` depending on
+plan/account capabilities.
+
+**Request body**:
+```json
+{
+  "model": "gpt-5.4",
+  "traces": [
+    {
+      "id": "trace_1",
+      "metadata": { "source_path": "memory.jsonl" },
+      "items": [ /* normalized trace items */ ]
+    }
+  ],
+  "reasoning": { "effort": "low" }
+}
+```
+
+**Response** — raw JSON, typically `{ "output": [...] }`.
 
 ---
 
@@ -342,6 +369,8 @@ Known `rate_limit_reached_type.type` values: `rate_limit_reached`, `workspace_ow
 
 Fetch managed requirements/config for this account (plan-gated settings).
 
+**SDK method**: `client.codex.config.requirements()`
+
 **Response** — JSON config blob; schema defined in `codex-rs/cloud-requirements`.
 
 ---
@@ -401,6 +430,27 @@ as backend metadata, not plaintext values.
 
 Remote control / agent-as-a-service websocket. Enrollment via:  
 `POST /backend-api/wham/remote/control/server/enroll`
+
+---
+
+## ChatGPT File Uploads
+
+### `POST /backend-api/files`
+
+Create file upload metadata for Codex Apps/MCP file parameters.
+
+**SDK method**: `client.files.upload(path)`
+
+The official flow is:
+
+1. `POST /backend-api/files` with `file_name`, `file_size`, and
+   `use_case: "codex"`.
+2. `PUT` the file bytes to the returned signed `upload_url`.
+3. `POST /backend-api/files/{file_id}/uploaded` until the backend returns
+   `status: "success"`.
+
+The SDK returns an `UploadedFile` object with `file_id`, canonical
+`sediment://...` URI, download URL, file name, size, MIME type, and local path.
 
 ---
 

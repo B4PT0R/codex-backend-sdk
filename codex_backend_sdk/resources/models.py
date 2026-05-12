@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any, TYPE_CHECKING
 
 from .._models import Model, SyncPage
@@ -10,25 +11,38 @@ from .._utils import _UNSET
 if TYPE_CHECKING:
     from .._client import CodexClient
 
-CLIENT_VERSION = "0.3.0"
+# This is the upstream Codex CLI protocol/client version expected by the
+# ChatGPT backend, not the PyPI package version.
+CLIENT_VERSION = "0.130.0"
+_CACHE_TTL = 300
 
 
 class Models:
     def __init__(self, client: CodexClient) -> None:
         self._client = client
+        self._cache: SyncPage | None = None
+        self._cache_fetched_at = 0.0
 
     def list(
         self,
         *,
+        force_refresh: bool = False,
         extra_headers: Any = None,
         extra_query: Any = None,
         extra_body: Any = None,
         timeout: Any = _UNSET,
     ) -> SyncPage:
+        if not force_refresh and self._cache is not None:
+            if time.time() - self._cache_fetched_at <= _CACHE_TTL:
+                return self._cache
+
         data = self._client._get("/models", params={"client_version": CLIENT_VERSION})
         models = [_model_from_backend(item) for item in data.get("models", [])]
-        models.sort(key=lambda model: getattr(model, "priority", 0), reverse=True)
-        return SyncPage(data=models)
+        models.sort(key=lambda model: getattr(model, "priority", 0))
+        page = SyncPage(data=models)
+        self._cache = page
+        self._cache_fetched_at = time.time()
+        return page
 
     def retrieve(
         self,

@@ -17,7 +17,7 @@ Quickstart:
     print(response.output_text)
 """
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 from .oauth import run_oauth_flow, refresh_access_token, obtain_api_key
 from .storage import load_tokens, save_tokens, TokenStore
@@ -41,6 +41,7 @@ from .codex_client import (
     SyncPage,
     CompactedResponse,
     Transcription,
+    UploadedFile,
     image_url,
     image_b64,
 )
@@ -61,6 +62,7 @@ __all__ = [
     "SyncPage",
     "CompactedResponse",
     "Transcription",
+    "UploadedFile",
     "ReasoningEffort",
     "ReasoningSummary",
     "ServiceTier",

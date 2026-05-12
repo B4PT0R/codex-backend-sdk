@@ -6,11 +6,14 @@ class FakeCodexClient(OpenAI):
         super().__init__(model="gpt-test")
         self.wham_gets = []
         self.chatgpt_gets = []
+        self.posts = []
 
     def _get_wham(self, path, *, params=None):
         self.wham_gets.append((path, params))
         if path == "/wham/usage":
             return {"rate_limit": {"allowed": True}}
+        if path == "/wham/config/requirements":
+            return {"requirements": [{"name": "network"}]}
         if path == "/wham/tasks/list":
             return {"items": [{"id": "task_1", "title": "Task"}], "cursor": None}
         if path == "/wham/tasks/task_1":
@@ -35,6 +38,20 @@ class FakeCodexClient(OpenAI):
             return {"object": "user_system_message_detail", "enabled": True}
         raise AssertionError(f"Unexpected path: {path}")
 
+    def _post(self, path, *, body, stream=False):
+        self.posts.append((path, body, stream))
+        if path == "/memories/trace_summarize":
+            return FakeJSONResponse({"output": [{"memory_summary": "summary"}]})
+        raise AssertionError(f"Unexpected Codex post path: {path}")
+
+
+class FakeJSONResponse:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
 
 def test_codex_usage_still_calls_wham_usage():
     client = FakeCodexClient()
@@ -52,6 +69,41 @@ def test_codex_memories_list_returns_raw_chatgpt_payload():
 
     assert memories["memories"][0]["id"] == "mem_1"
     assert client.chatgpt_gets == ["/memories"]
+
+
+def test_codex_memories_trace_summarize_posts_codex_payload():
+    client = FakeCodexClient()
+
+    response = client.codex.memories.trace_summarize(
+        model="gpt-test",
+        traces=[
+            {
+                "id": "trace_1",
+                "metadata": {"source_path": "/tmp/memory.jsonl"},
+                "items": [{"type": "message", "content": "remember me"}],
+            }
+        ],
+        reasoning={"effort": "low"},
+    )
+
+    assert response == {"output": [{"memory_summary": "summary"}]}
+    assert client.posts == [
+        (
+            "/memories/trace_summarize",
+            {
+                "model": "gpt-test",
+                "traces": [
+                    {
+                        "id": "trace_1",
+                        "metadata": {"source_path": "/tmp/memory.jsonl"},
+                        "items": [{"type": "message", "content": "remember me"}],
+                    }
+                ],
+                "reasoning": {"effort": "low"},
+            },
+            False,
+        )
+    ]
 
 
 def test_codex_user_system_messages_retrieve_returns_raw_chatgpt_payload():
@@ -110,3 +162,12 @@ def test_codex_environments_list_returns_raw_payload():
 
     assert environments == [{"id": "env_1", "label": "default"}]
     assert client.wham_gets == [("/wham/environments", None)]
+
+
+def test_codex_config_requirements_returns_raw_payload():
+    client = FakeCodexClient()
+
+    requirements = client.codex.config.requirements()
+
+    assert requirements == {"requirements": [{"name": "network"}]}
+    assert client.wham_gets == [("/wham/config/requirements", None)]

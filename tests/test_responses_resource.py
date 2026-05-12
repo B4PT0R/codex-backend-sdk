@@ -14,6 +14,14 @@ class FakeSSE:
         yield b""
 
 
+class FakeJSONResponse:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+
 class FakeClient(OpenAI):
     def __init__(self):
         super().__init__(model="gpt-test")
@@ -22,6 +30,11 @@ class FakeClient(OpenAI):
 
     def _post(self, path, *, body, stream=False):
         self.posts.append((path, body, stream))
+        if path == "/responses/compact":
+            return FakeJSONResponse({
+                "id": "resp_123",
+                "output": [{"type": "message", "content": []}],
+            })
         return FakeSSE([
             'data: {"type":"response.content_part.delta","delta":{"text":"hel"}}',
             "",
@@ -39,12 +52,20 @@ class FakeClient(OpenAI):
         return {
             "models": [
                 {
-                    "slug": "gpt-test",
-                    "display_name": "GPT Test",
+                    "slug": "gpt-lower-priority",
+                    "display_name": "GPT Lower Priority",
                     "description": "Test model",
                     "context_window": 123,
                     "supported_in_api": True,
                     "priority": 7,
+                },
+                {
+                    "slug": "gpt-test",
+                    "display_name": "GPT Test",
+                    "description": "Test model",
+                    "context_window": 456,
+                    "supported_in_api": True,
+                    "priority": 1,
                 }
             ]
         }
@@ -123,11 +144,58 @@ def test_models_resource_returns_iterable_page():
     page = client.models.list()
     model = page[0]
 
-    assert len(page) == 1
-    assert list(page) == [model]
+    assert len(page) == 2
     assert model.id == "gpt-test"
-    assert model.context_window == 123
+    assert model.context_window == 456
     assert client.models.retrieve("gpt-test").id == "gpt-test"
+    assert len(client.gets) == 1
+
+
+def test_models_resource_can_force_refresh_cached_page():
+    client = FakeClient()
+
+    assert client.models.list() is client.models.list()
+    client.models.list(force_refresh=True)
+
+    assert len(client.gets) == 2
+
+
+def test_responses_compact_sends_shared_request_fields():
+    client = FakeClient()
+
+    compacted = client.responses.compact(
+        model="gpt-test",
+        input=[{"role": "user", "content": "Long context"}],
+        instructions="Compact this.",
+        tools=[{"type": "web_search"}],
+        parallel_tool_calls=True,
+        reasoning={"effort": "medium"},
+        service_tier="priority",
+        prompt_cache_key="cache-key",
+        text={"verbosity": "low"},
+    )
+
+    assert compacted.id == "resp_123"
+    path, payload, stream = client.posts[0]
+    assert path == "/responses/compact"
+    assert stream is False
+    assert payload == {
+        "model": "gpt-test",
+        "instructions": "Compact this.",
+        "input": [
+            {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "Long context"}],
+            }
+        ],
+        "tools": [{"type": "web_search_preview"}],
+        "parallel_tool_calls": True,
+        "reasoning": {"effort": "medium"},
+        "service_tier": "priority",
+        "prompt_cache_key": "cache-key",
+        "text": {"verbosity": "low"},
+    }
 
 
 def test_responses_create_rejects_official_params_not_exposed_by_codex_backend():

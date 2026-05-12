@@ -51,7 +51,7 @@ def test_realtime_calls_create_posts_plain_sdp_like_official_sdk():
     assert kwargs["headers"]["Content-Type"] == "application/sdp"
 
 
-def test_realtime_calls_create_posts_session_as_multipart():
+def test_realtime_calls_create_posts_session_as_backend_json():
     client = FakeRealtimeClient()
 
     client.realtime.calls.create(
@@ -61,9 +61,11 @@ def test_realtime_calls_create_posts_session_as_multipart():
 
     path, kwargs = client.raw_posts[0]
     assert path == "/realtime/calls"
-    assert kwargs["files"][0][0] == "sdp"
-    assert kwargs["files"][1][0] == "session"
-    assert b"gpt-realtime-1.5" in kwargs["files"][1][1][1]
+    assert kwargs["body"] == {
+        "sdp": "offer-sdp",
+        "session": {"type": "realtime", "model": "gpt-realtime-1.5"},
+    }
+    assert kwargs["headers"]["Accept"] == "application/sdp"
 
 
 def test_realtime_websocket_helpers_match_codex_agent_plugin_contract():

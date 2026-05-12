@@ -115,14 +115,31 @@ class Responses:
         input: list[dict[str, Any]],
         model: Any = _UNSET,
         instructions: Any = _UNSET,
+        tools: Any = _UNSET,
+        parallel_tool_calls: Any = _UNSET,
+        reasoning: Any = _UNSET,
+        service_tier: Any = _UNSET,
+        prompt_cache_key: Any = _UNSET,
+        text: Any = _UNSET,
     ) -> CompactedResponse:
+        normalized_tools = _normalize_tools(tools)
         payload = {
             "model": _default(model, self._client._defaults["model"]),
             "instructions": _default(instructions, self._client._defaults["instructions"]) or "",
             "input": [_normalize_input_item(item) for item in input],
-            "tools": [],
-            "parallel_tool_calls": False,
+            "tools": normalized_tools,
+            "parallel_tool_calls": (
+                bool(_default(parallel_tool_calls, False)) if normalized_tools else False
+            ),
         }
+        if _is_given(reasoning) and reasoning is not None:
+            payload["reasoning"] = _normalize_reasoning(reasoning)
+        if _is_given(service_tier) and service_tier is not None:
+            payload["service_tier"] = service_tier
+        if _is_given(prompt_cache_key) and prompt_cache_key is not None:
+            payload["prompt_cache_key"] = prompt_cache_key
+        if _is_given(text) and text is not None:
+            payload["text"] = _normalize_text(text)
         data = self._client._post("/responses/compact", body=payload).json()
         return CompactedResponse(id=data.get("id", ""), output=data.get("output", []))
 

@@ -24,6 +24,7 @@ from ._models import (
     SyncPage,
     TokenDetails,
     Transcription,
+    UploadedFile,
     Verbosity,
 )
 from ._utils import CodexBackendUnsupportedParameterError, image_b64, image_url
@@ -48,6 +49,7 @@ __all__ = [
     "SyncPage",
     "TokenDetails",
     "Transcription",
+    "UploadedFile",
     "Verbosity",
     "image_b64",
     "image_url",

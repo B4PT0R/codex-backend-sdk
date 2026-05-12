@@ -16,6 +16,7 @@ class CodexResources:
         self.memories = CodexMemories(client)
         self.tasks = CodexTasks(client)
         self.environments = CodexEnvironments(client)
+        self.config = CodexConfig(client)
         self.user_system_messages = CodexUserSystemMessages(client)
 
     def usage(self) -> dict[str, Any]:
@@ -30,6 +31,30 @@ class CodexMemories:
 
     def list(self) -> dict[str, Any]:
         return self._client._get_chatgpt("/memories")
+
+    def trace_summarize(
+        self,
+        *,
+        model: str,
+        traces: list[dict[str, Any]],
+        reasoning: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if not model:
+            raise ValueError(f"Expected a non-empty value for `model` but received {model!r}")
+        payload: dict[str, Any] = {"model": model, "traces": traces}
+        if reasoning is not None:
+            payload["reasoning"] = reasoning
+        return self._client._post("/memories/trace_summarize", body=payload).json()
+
+
+class CodexConfig:
+    """Codex WHAM account configuration resources."""
+
+    def __init__(self, client: CodexClient) -> None:
+        self._client = client
+
+    def requirements(self) -> dict[str, Any]:
+        return self._client._get_wham("/wham/config/requirements")
 
 
 class CodexTasks:

@@ -1,380 +1,237 @@
-"""
-Custom SDK for the ChatGPT Codex backend API.
-
-Endpoint base: https://chatgpt.com/backend-api/codex
-Auth:          Bearer <access_token> + ChatGPT-Account-ID header
-
-Reverse-engineered from codex-rs source:
-  - model-provider-info/src/lib.rs        → base URL selection
-  - codex-api/src/endpoint/models.rs      → GET /models
-  - codex-api/src/endpoint/responses.rs   → POST /responses (SSE)
-  - codex-api/src/endpoint/compact.rs     → POST /responses/compact
-  - codex-api/src/endpoint/memories.rs    → POST /memories/trace_summarize
-  - codex-api/src/common.rs               → full request schemas
-
-Confirmed live behaviour (2026-04-20):
-  - /responses          : stream=True ONLY; tool_choice required
-  - /responses/compact  : sync POST; compaction_summary reusable as input
-  - /memories/…         : 403 on Plus plan (Pro/Enterprise only)
-  - /realtime/calls     : 404 (not deployed)
-"""
+"""OpenAI-shaped Python client for the ChatGPT Codex backend."""
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
-from typing import Any, Generator, Iterator, Literal, Optional, Union
+import time
+from collections.abc import Iterable, Iterator
+from typing import Any, Literal, Optional
 
 import requests
+from pydantic import BaseModel, ConfigDict, Field
 
 from .storage import TokenStore, load_tokens, save_tokens, token_needs_refresh
 
 BASE_URL = "https://chatgpt.com/backend-api/codex"
+WHAM_BASE_URL = "https://chatgpt.com/backend-api"
 CLIENT_VERSION = "0.1.0"
 ORIGINATOR = "codex_cli_rs"
 
 ReasoningEffort = Literal["minimal", "low", "medium", "high", "xhigh"]
 ReasoningSummary = Literal["concise", "detailed", "auto"]
 Verbosity = Literal["low", "medium", "high"]
-ServiceTier = Literal["flex", "fast"]
+ServiceTier = Literal["flex", "priority"]
 
-# Type for user_message: plain string, or a list of content blocks (text + images)
-MessageContent = Union[str, list[dict]]
-
-# Sentinel used as default for per-call parameters so we can distinguish
-# "caller did not pass this" from "caller explicitly passed None".
 _UNSET: Any = object()
 
+__all__ = [
+    "CodexBackendUnsupportedParameterError",
+    "CodexBaseModel",
+    "CodexClient",
+    "CompactedResponse",
+    "Model",
+    "OpenAI",
+    "ReasoningEffort",
+    "ReasoningSummary",
+    "Response",
+    "ResponseStreamEvent",
+    "ResponseUsage",
+    "ServiceTier",
+    "SyncPage",
+    "TokenDetails",
+    "Verbosity",
+    "image_b64",
+    "image_url",
+]
 
-# ---------------------------------------------------------------------------
-# Module-level helpers for image content blocks
-# ---------------------------------------------------------------------------
 
-def image_url(url: str) -> dict:
-    """Content block for an image at the given URL (for use in user_message lists)."""
+class CodexBackendUnsupportedParameterError(NotImplementedError):
+    """Raised when an official OpenAI parameter is absent from the Codex backend."""
+
+
+def image_url(url: str) -> dict[str, str]:
     return {"type": "input_image", "image_url": url}
 
 
-def image_b64(data: str, media_type: str = "image/jpeg") -> dict:
-    """Content block for a base64-encoded image (for use in user_message lists)."""
+def image_b64(data: str, media_type: str = "image/jpeg") -> dict[str, str]:
     return {"type": "input_image", "image_url": f"data:{media_type};base64,{data}"}
 
 
-# ---------------------------------------------------------------------------
-# Data models
-# ---------------------------------------------------------------------------
+class CodexBaseModel(BaseModel):
+    """Pydantic base with convenience helpers matching openai-python objects."""
 
-@dataclass
-class ReasoningLevel:
-    effort: str
-    description: str
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
 
-
-@dataclass
-class ModelInfo:
-    slug: str
-    display_name: str
-    description: str
-    context_window: Optional[int] = None
-    supported_in_api: bool = False
-    priority: int = 0
-    supports_reasoning_summaries: bool = False
-    support_verbosity: bool = False
-    default_verbosity: Optional[str] = None
-    default_reasoning_level: Optional[str] = None
-    supported_reasoning_levels: list[ReasoningLevel] = field(default_factory=list)
-    auto_compact_token_limit: Optional[int] = None
-    prefer_websockets: bool = False
-    input_modalities: list[str] = field(default_factory=list)
-    available_in_plans: list[str] = field(default_factory=list)
-    base_instructions: str = ""
-    raw: dict = field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, d: dict) -> "ModelInfo":
-        levels = [
-            ReasoningLevel(effort=r.get("effort", ""), description=r.get("description", ""))
-            for r in d.get("supported_reasoning_levels", [])
-        ]
-        return cls(
-            slug=d.get("slug", ""),
-            display_name=d.get("display_name", d.get("slug", "")),
-            description=d.get("description", ""),
-            context_window=d.get("context_window"),
-            supported_in_api=d.get("supported_in_api", False),
-            priority=d.get("priority", 0),
-            supports_reasoning_summaries=d.get("supports_reasoning_summaries", False),
-            support_verbosity=d.get("support_verbosity", False),
-            default_verbosity=d.get("default_verbosity"),
-            default_reasoning_level=d.get("default_reasoning_level"),
-            supported_reasoning_levels=levels,
-            auto_compact_token_limit=d.get("auto_compact_token_limit"),
-            prefer_websockets=d.get("prefer_websockets", False),
-            input_modalities=d.get("input_modalities", []),
-            available_in_plans=d.get("available_in_plans", []),
-            base_instructions=d.get("base_instructions", ""),
-            raw=d,
+    def to_dict(
+        self,
+        *,
+        mode: Literal["json", "python"] = "python",
+        use_api_names: bool = True,
+        exclude_unset: bool = True,
+        exclude_defaults: bool = False,
+        exclude_none: bool = False,
+        warnings: bool = True,
+    ) -> dict[str, Any]:
+        return self.model_dump(
+            mode=mode,
+            by_alias=use_api_names,
+            exclude_unset=exclude_unset,
+            exclude_defaults=exclude_defaults,
+            exclude_none=exclude_none,
+            warnings=warnings,
         )
 
+    def to_json(
+        self,
+        *,
+        use_api_names: bool = True,
+        exclude_unset: bool = True,
+        exclude_defaults: bool = False,
+        exclude_none: bool = False,
+        warnings: bool = True,
+    ) -> str:
+        return self.model_dump_json(
+            by_alias=use_api_names,
+            exclude_unset=exclude_unset,
+            exclude_defaults=exclude_defaults,
+            exclude_none=exclude_none,
+            warnings=warnings,
+        )
 
-@dataclass
-class TextDelta:
-    """Incremental text chunk from a streaming response."""
-    text: str
-
-
-@dataclass
-class ReasoningDelta:
-    """Reasoning content delivered when include_reasoning=True."""
-    text: str
-    summary_index: int = 0
-
-
-@dataclass
-class ToolCall:
-    """
-    Emitted when the model requests a function call.
-
-    Typical tool loop:
-
-        history = []
-        for event in client.stream("What's the weather in Paris?", tools=tools):
-            if isinstance(event, TextDelta):
-                print(event.text, end="")
-            elif isinstance(event, ToolCall):
-                result = dispatch(event.name, event.parsed_arguments())
-                history.append(event.as_history_item())
-                history.append(event.to_tool_result(json.dumps(result)))
-
-        # Continue — model sees the tool result and responds
-        for event in client.stream(None, conversation_history=history, tools=tools):
-            ...
-    """
-    call_id: str
-    name: str
-    arguments: str  # JSON string, same convention as the official SDK
-    raw: dict = field(default_factory=dict)
-
-    def parsed_arguments(self) -> dict:
-        """Deserialize the arguments JSON string to a dict."""
-        return json.loads(self.arguments)
-
-    def as_history_item(self) -> dict:
-        """The raw function_call dict to append to conversation_history."""
-        return self.raw
-
-    def to_tool_result(self, output: str) -> dict:
-        """
-        Build a function_call_output item for conversation_history.
-
-            history.append(call.as_history_item())
-            history.append(call.to_tool_result(json.dumps(result)))
-        """
-        return {
-            "type": "function_call_output",
-            "call_id": self.call_id,
-            "output": output,
-        }
+    def __getitem__(self, key: str) -> Any:
+        return getattr(self, key)
 
 
-@dataclass
-class TokenUsage:
+class TokenDetails(CodexBaseModel):
+    cached_tokens: int = 0
+    reasoning_tokens: int = 0
+
+
+class ResponseUsage(CodexBaseModel):
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
-    reasoning_tokens: int = 0
-    cached_tokens: int = 0
+    input_tokens_details: TokenDetails = Field(default_factory=TokenDetails)
+    output_tokens_details: TokenDetails = Field(default_factory=TokenDetails)
 
 
-@dataclass
-class ResponseCompleted:
-    """Final event emitted when a streaming response finishes successfully."""
-    response_id: str
-    usage: TokenUsage = field(default_factory=TokenUsage)
-
-    @property
-    def input_tokens(self) -> int:
-        return self.usage.input_tokens
-
-    @property
-    def output_tokens(self) -> int:
-        return self.usage.output_tokens
-
-    @property
-    def total_tokens(self) -> int:
-        return self.usage.total_tokens
-
-
-@dataclass
-class ResponseFailed:
-    """Emitted on response.failed SSE events."""
-    code: str
-    message: str
-
-
-@dataclass
-class OutputItem:
-    """A completed output item that is not a function call (message, compaction_summary, …)."""
-    item_type: str
-    role: Optional[str]
-    content: list[dict]
-    raw: dict = field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, d: dict) -> "OutputItem":
-        content_raw = d.get("content", [])
-        content = []
-        for c in content_raw:
-            if c.get("type") == "output_text":
-                content.append({"type": "text", "text": c.get("text", "")})
-            else:
-                content.append(c)
-        return cls(
-            item_type=d.get("type", ""),
-            role=d.get("role"),
-            content=content,
-            raw=d,
-        )
-
-
-@dataclass
-class CompactionResult:
-    """
-    Result of POST /responses/compact.
-
-    output_items can be passed directly as conversation_history to stream().
-    It includes original messages plus a compaction_summary item (encrypted
-    blob that the model understands — treat it as opaque on the client side).
-    """
-    response_id: str
-    output_items: list[dict]
+class Response(CodexBaseModel):
+    id: str
+    created_at: float = Field(default_factory=time.time)
+    error: Optional[dict[str, Any]] = None
+    incomplete_details: Optional[dict[str, Any]] = None
+    instructions: Any = None
+    metadata: Optional[dict[str, Any]] = None
+    model: Optional[str] = None
+    object: Literal["response"] = "response"
+    output: list[dict[str, Any]] = Field(default_factory=list)
+    parallel_tool_calls: bool = False
+    temperature: Optional[float] = None
+    tool_choice: Any = "auto"
+    tools: list[dict[str, Any]] = Field(default_factory=list)
+    top_p: Optional[float] = None
+    background: Optional[bool] = None
+    completed_at: Optional[float] = None
+    conversation: Any = None
+    max_output_tokens: Optional[int] = None
+    max_tool_calls: Optional[int] = None
+    previous_response_id: Optional[str] = None
+    prompt: Any = None
+    prompt_cache_key: Optional[str] = None
+    prompt_cache_retention: Optional[str] = None
+    reasoning: Any = None
+    safety_identifier: Optional[str] = None
+    service_tier: Optional[str] = None
+    status: Optional[str] = "completed"
+    text: Any = None
+    top_logprobs: Optional[int] = None
+    truncation: Optional[str] = None
+    usage: Optional[ResponseUsage] = Field(default_factory=ResponseUsage)
+    user: Optional[str] = None
 
     @property
-    def has_summary(self) -> bool:
-        return any(item.get("type") == "compaction_summary" for item in self.output_items)
+    def output_text(self) -> str:
+        texts: list[str] = []
+        for output in self.output:
+            if output.get("type") == "message":
+                for content in output.get("content", []):
+                    if content.get("type") == "output_text":
+                        texts.append(content.get("text", ""))
+        return "".join(texts)
 
-    @property
-    def summary_item(self) -> Optional[dict]:
-        for item in self.output_items:
-            if item.get("type") == "compaction_summary":
-                return item
+
+class ResponseStreamEvent(CodexBaseModel):
+    type: str
+
+
+class Model(CodexBaseModel):
+    id: str
+    created: int = 0
+    object: Literal["model"] = "model"
+    owned_by: str = "openai"
+
+
+class SyncPage(CodexBaseModel):
+    object: Literal["list"] = "list"
+    data: list[Any] = Field(default_factory=list)
+
+    def __iter__(self) -> Iterator[Any]:
+        return iter(self.data)
+
+    def __len__(self) -> int:
+        return len(self.data)
+
+    def __getitem__(self, key: Any) -> Any:
+        if isinstance(key, int):
+            return self.data[key]
+        return getattr(self, key)
+
+    def has_next_page(self) -> bool:
+        return False
+
+    def next_page_info(self) -> None:
         return None
 
 
-# Union type for stream events
-StreamEvent = Union[TextDelta, ReasoningDelta, ToolCall, OutputItem, ResponseCompleted, ResponseFailed]
+class CompactedResponse(CodexBaseModel):
+    id: str
+    object: str = "response.compacted"
+    output: list[dict[str, Any]] = Field(default_factory=list)
 
-
-# ---------------------------------------------------------------------------
-# Client
-# ---------------------------------------------------------------------------
 
 class CodexClient:
-    """
-    Python SDK for the ChatGPT Codex backend API.
+    """Client entrypoint intentionally shaped like ``openai.OpenAI``.
 
-    Session-level defaults can be set on the client and are used for every
-    stream()/respond() call unless overridden per-call:
-
-        client = CodexClient.from_saved_tokens(
-            model="gpt-5.3-codex",
-            instructions="You are a concise assistant.",
-            reasoning="medium",
-            web_search="cached",
-            service_tier="fast",
-        )
-
-        # Uses session defaults:
-        client.stream("Explain quicksort")
-
-        # Overrides reasoning for this call only:
-        client.stream("Quick one-liner?", reasoning="minimal")
-
-        # Explicitly disables a default for this call (None overrides a set default):
-        client.stream("No web please", web_search=None)
-
-    Tool use (same tool definition format as the official OpenAI SDK):
-        tools = [{"type": "function", "name": "get_weather", ...}]
-
-        history = []
-        for event in client.stream("Weather in Paris?", tools=tools):
-            if isinstance(event, ToolCall):
-                result = dispatch(event.name, event.parsed_arguments())
-                history.append(event.as_history_item())
-                history.append(event.to_tool_result(json.dumps(result)))
-
-        for event in client.stream(None, conversation_history=history, tools=tools):
-            if isinstance(event, TextDelta):
-                print(event.text, end="")
-
-    Image input:
-        from codex_sdk import image_url, image_b64
-        client.stream(["Describe this image:", image_url("https://...")])
+    The transport targets ``chatgpt.com/backend-api/codex`` and authenticates via
+    ChatGPT OAuth tokens, but exposed resources follow openai-python where the
+    backend overlaps with the official API.
     """
 
     def __init__(
         self,
-        store: Optional[TokenStore] = None,
         *,
+        store: Optional[TokenStore] = None,
         model: str = "gpt-5.4",
-        instructions: str = "",
-        reasoning: Optional[ReasoningEffort] = None,
-        reasoning_summary: Optional[ReasoningSummary] = None,
-        verbosity: Optional[Verbosity] = None,
-        web_search: Optional[str] = None,
-        service_tier: Optional[ServiceTier] = None,
-        parallel_tool_calls: bool = False,
-        tools: Optional[list[dict]] = None,
-        persist: bool = False,
-        include_reasoning: bool = False,
+        instructions: Optional[str] = None,
+        timeout: float = 120,
     ) -> None:
         self._store = store
+        self._timeout = timeout
         self._session = requests.Session()
-        if store:
-            self._session.headers.update(self._auth_headers())
-        # Session-level defaults — resolved by _resolve() in stream()/respond()
-        self._defaults: dict[str, Any] = {
+        self._defaults = {
             "model": model,
             "instructions": instructions,
-            "reasoning": reasoning,
-            "reasoning_summary": reasoning_summary,
-            "verbosity": verbosity,
-            "web_search": web_search,
-            "service_tier": service_tier,
-            "parallel_tool_calls": parallel_tool_calls,
-            "tools": tools,
-            "store": persist,
-            "include_reasoning": include_reasoning,
         }
-
-    def _resolve(self, key: str, value: Any) -> Any:
-        """Return value if explicitly passed, otherwise fall back to session default."""
-        return self._defaults[key] if value is _UNSET else value
-
-    # ------------------------------------------------------------------
-    # Authentication
-    # ------------------------------------------------------------------
+        if store is not None:
+            self._session.headers.update(self._auth_headers())
+        self.responses = Responses(self)
+        self.models = Models(self)
+        self.codex = CodexResources(self)
 
     def authenticate(self, *, request_api_key: bool = True) -> "CodexClient":
-        """
-        Ensure this client is authenticated against the server:
-
-        1. Load ~/.codex/auth.json if present.
-        2. If token is stale (exp within 5 min or last_refresh > 55 min) → refresh proactively.
-        3. If token is fresh → use it directly (no network probe needed).
-        4. If still stale after failed refresh → probe /wham/usage as last resort.
-        5. If probe fails or no tokens → full OAuth browser flow.
-
-        Tokens are persisted after every refresh or new login.
-        Returns self for chaining:
-
-            client = CodexClient().authenticate()
-            client = CodexClient(model="gpt-5.4", reasoning="low").authenticate()
-        """
         from .oauth import refresh_access_token, run_oauth_flow
 
-        def _do_refresh(store: TokenStore) -> Optional[TokenStore]:
-            """Attempt a token refresh; return updated store or None on failure."""
+        def refresh(store: TokenStore) -> Optional[TokenStore]:
             try:
                 data = refresh_access_token(store.refresh_token)
                 refreshed = TokenStore.from_exchange(
@@ -385,66 +242,31 @@ class CodexClient:
                 )
                 save_tokens(refreshed)
                 return refreshed
-            except Exception as exc:
-                print(f"[auth] Refresh failed: {exc}")
+            except Exception:
                 return None
 
-        def _probe(store: TokenStore) -> bool:
-            """Return True if the server accepts these tokens."""
-            try:
-                resp = requests.get(
-                    "https://chatgpt.com/backend-api/wham/usage",
-                    headers={
-                        "Authorization": f"Bearer {store.access_token}",
-                        "originator": ORIGINATOR,
-                        **({"ChatGPT-Account-ID": store.account_id} if store.account_id else {}),
-                    },
-                    timeout=15,
-                )
-                return resp.ok
-            except Exception:
-                return False
-
         store = load_tokens()
-
         if store is not None:
-            # Proactive refresh: don't wait for a 401
-            if token_needs_refresh(store):
-                print("[auth] Token stale — refreshing proactively…")
-                if store.refresh_token:
-                    refreshed = _do_refresh(store)
-                    if refreshed:
-                        store = refreshed
-                        print("[auth] Token refreshed.")
-                    else:
-                        print("[auth] Proactive refresh failed — trying existing tokens…")
-
-            # If token is now fresh, skip the probe entirely
-            if not token_needs_refresh(store):
-                self._store = store
-                self._session.headers.update(self._auth_headers())
+            if token_needs_refresh(store) and store.refresh_token:
+                store = refresh(store) or store
+            if not token_needs_refresh(store) or self._probe_auth(store):
+                self._set_store(store)
                 return self
 
-            # Token still stale (no refresh_token or refresh failed) — probe server
-            if _probe(store):
-                self._store = store
-                self._session.headers.update(self._auth_headers())
-                return self
-
-            print("[auth] Tokens rejected — running full login…")
-
-        store = run_oauth_flow(request_api_key=request_api_key)
-        self._store = store
-        self._session.headers.update(self._auth_headers())
+        self._set_store(run_oauth_flow(request_api_key=request_api_key))
         return self
 
-    def _ensure_auth(self) -> None:
-        if not self._store or not self._store.account_id:
-            raise RuntimeError(
-                "Not authenticated — call authenticate() first."
-            )
+    def _set_store(self, store: TokenStore) -> None:
+        self._store = store
+        self._session.headers.update(self._auth_headers())
 
-    def _auth_headers(self) -> dict:
+    def _ensure_auth(self) -> None:
+        if self._store is None or not self._store.account_id:
+            raise RuntimeError("Not authenticated. Call authenticate() first.")
+
+    def _auth_headers(self) -> dict[str, str]:
+        if self._store is None:
+            return {}
         headers = {
             "Authorization": f"Bearer {self._store.access_token}",
             "originator": ORIGINATOR,
@@ -454,411 +276,511 @@ class CodexClient:
             headers["ChatGPT-Account-ID"] = self._store.account_id
         return headers
 
-    # ------------------------------------------------------------------
-    # Models
-    # ------------------------------------------------------------------
+    def _probe_auth(self, store: TokenStore) -> bool:
+        try:
+            response = requests.get(
+                f"{WHAM_BASE_URL}/wham/usage",
+                headers={
+                    "Authorization": f"Bearer {store.access_token}",
+                    "originator": ORIGINATOR,
+                    **({"ChatGPT-Account-ID": store.account_id} if store.account_id else {}),
+                },
+                timeout=15,
+            )
+            return response.ok
+        except Exception:
+            return False
 
-    def list_models(self) -> list[ModelInfo]:
-        """
-        GET /models — list models available to this account.
-
-        Returns ModelInfo objects sorted by priority (highest first).
-        """
+    def _get(self, path: str, *, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         self._ensure_auth()
-        resp = self._session.get(
-            f"{BASE_URL}/models",
-            params={"client_version": CLIENT_VERSION},
-            timeout=15,
+        response = self._session.get(f"{BASE_URL}{path}", params=params, timeout=self._timeout)
+        response.raise_for_status()
+        return response.json()
+
+    def _post(self, path: str, *, body: dict[str, Any], stream: bool = False) -> requests.Response:
+        self._ensure_auth()
+        response = self._session.post(
+            f"{BASE_URL}{path}",
+            json=body,
+            headers={"Accept": "text/event-stream"} if stream else None,
+            stream=stream,
+            timeout=self._timeout,
         )
-        resp.raise_for_status()
-        models = [ModelInfo.from_dict(m) for m in resp.json().get("models", [])]
-        models.sort(key=lambda m: m.priority, reverse=True)
-        return models
+        response.raise_for_status()
+        return response
 
-    def get_model(self, slug: str) -> Optional[ModelInfo]:
-        """Return the ModelInfo for a specific slug, or None if not found."""
-        return next((m for m in self.list_models() if m.slug == slug), None)
-
-    # ------------------------------------------------------------------
-    # Usage / quota
-    # ------------------------------------------------------------------
-
-    def usage(self) -> dict:
-        """
-        GET /backend-api/wham/usage — query rate limits and quota for this account.
-
-        Returns the raw JSON dict from the backend.
-        """
+    def _get_wham(self, path: str) -> dict[str, Any]:
         self._ensure_auth()
-        resp = self._session.get(
-            "https://chatgpt.com/backend-api/wham/usage",
-            timeout=15,
+        response = self._session.get(f"{WHAM_BASE_URL}{path}", timeout=30)
+        response.raise_for_status()
+        return response.json()
+
+
+OpenAI = CodexClient
+
+
+class Responses:
+    def __init__(self, client: CodexClient) -> None:
+        self._client = client
+
+    def create(
+        self,
+        *,
+        background: Any = _UNSET,
+        context_management: Any = _UNSET,
+        conversation: Any = _UNSET,
+        include: Any = _UNSET,
+        input: Any = _UNSET,
+        instructions: Any = _UNSET,
+        max_output_tokens: Any = _UNSET,
+        max_tool_calls: Any = _UNSET,
+        metadata: Any = _UNSET,
+        model: Any = _UNSET,
+        parallel_tool_calls: Any = _UNSET,
+        previous_response_id: Any = _UNSET,
+        prompt: Any = _UNSET,
+        prompt_cache_key: Any = _UNSET,
+        prompt_cache_retention: Any = _UNSET,
+        reasoning: Any = _UNSET,
+        safety_identifier: Any = _UNSET,
+        service_tier: Any = _UNSET,
+        store: Any = _UNSET,
+        stream: Any = _UNSET,
+        stream_options: Any = _UNSET,
+        temperature: Any = _UNSET,
+        text: Any = _UNSET,
+        tool_choice: Any = _UNSET,
+        tools: Any = _UNSET,
+        top_logprobs: Any = _UNSET,
+        top_p: Any = _UNSET,
+        truncation: Any = _UNSET,
+        user: Any = _UNSET,
+        extra_headers: Any = None,
+        extra_query: Any = None,
+        extra_body: Any = None,
+        timeout: Any = _UNSET,
+    ) -> Response | Iterator[ResponseStreamEvent]:
+        _reject_backend_unsupported(
+            background=background,
+            context_management=context_management,
+            conversation=conversation,
+            max_output_tokens=max_output_tokens,
+            max_tool_calls=max_tool_calls,
+            metadata=metadata,
+            previous_response_id=previous_response_id,
+            prompt=prompt,
+            prompt_cache_retention=prompt_cache_retention,
+            safety_identifier=safety_identifier,
+            stream_options=stream_options,
+            temperature=temperature,
+            top_logprobs=top_logprobs,
+            top_p=top_p,
+            truncation=truncation,
+            user=user,
+            extra_body=extra_body,
         )
-        resp.raise_for_status()
-        return resp.json()
 
-    # ------------------------------------------------------------------
-    # Responses — SSE streaming  (stream=True is mandatory by the backend)
-    # ------------------------------------------------------------------
+        if _is_given(store) and store is not False:
+            raise NotImplementedError("The Codex backend only accepts store=False.")
 
-    def stream(
-        self,
-        user_message: Optional[MessageContent] = None,
-        *,
-        # Per-call params — _UNSET means "use session default"
-        model: str = _UNSET,
-        instructions: str = _UNSET,
-        reasoning: Optional[ReasoningEffort] = _UNSET,
-        reasoning_summary: Optional[ReasoningSummary] = _UNSET,
-        verbosity: Optional[Verbosity] = _UNSET,
-        web_search: Optional[str] = _UNSET,
-        service_tier: Optional[ServiceTier] = _UNSET,
-        parallel_tool_calls: bool = _UNSET,
-        tools: Optional[list[dict]] = _UNSET,
-        store: bool = _UNSET,
-        include_reasoning: bool = _UNSET,
-        # Always per-call (no session default)
-        conversation_history: Optional[list[dict]] = None,
-        tool_choice: Union[str, dict] = "auto",
-        output_schema: Optional[dict] = None,
-        prompt_cache_key: Optional[str] = None,
-    ) -> Iterator[StreamEvent]:
-        """
-        POST /responses — stream a model response via SSE.
-
-        Yields StreamEvent objects:
-          TextDelta          — incremental text chunk
-          ReasoningDelta     — reasoning summary chunk (if include_reasoning=True)
-          ToolCall           — model requests a function call
-          OutputItem         — completed non-tool output item (message, …)
-          ResponseCompleted  — final event with full token usage breakdown
-          ResponseFailed     — error event
-
-        Parameters with a session default (set on the client, overridable per-call):
-            model, instructions, reasoning, reasoning_summary, verbosity,
-            web_search, service_tier, parallel_tool_calls, tools, store,
-            include_reasoning.
-
-        Parameters that are always per-call:
-            user_message:        The user's prompt. May be:
-                                   - str: plain text message
-                                   - list[dict]: content blocks (text + images),
-                                     e.g. ["Describe:", image_url("https://...")]
-                                   - None: no new user message (use after tool results)
-            conversation_history: Prior turns as ResponseItem-compatible dicts.
-                                   Can include compaction_summary items from compact().
-                                   After a ToolCall, append call.as_history_item() and
-                                   call.to_tool_result(output) here before the next call.
-            tool_choice:         "auto" | "none" | "required" | {"type": "function",
-                                   "name": "..."}.  Ignored when no tools are active.
-            output_schema:       JSON Schema dict for structured output. Mutually
-                                   exclusive with verbosity.
-            prompt_cache_key:    UUID to share across calls that have a common prefix
-                                   to hit the server-side prompt cache.
-        """
-        self._ensure_auth()
-
-        # Resolve session defaults
-        model = self._resolve("model", model)
-        instructions = self._resolve("instructions", instructions)
-        reasoning = self._resolve("reasoning", reasoning)
-        reasoning_summary = self._resolve("reasoning_summary", reasoning_summary)
-        verbosity = self._resolve("verbosity", verbosity)
-        web_search = self._resolve("web_search", web_search)
-        service_tier = self._resolve("service_tier", service_tier)
-        parallel_tool_calls = self._resolve("parallel_tool_calls", parallel_tool_calls)
-        tools = self._resolve("tools", tools)
-        store = self._resolve("store", store)
-        include_reasoning = self._resolve("include_reasoning", include_reasoning)
-
-        input_items = list(conversation_history or [])
-
-        if user_message is not None and user_message != "":
-            if isinstance(user_message, str):
-                content: list[dict] = [{"type": "input_text", "text": user_message}]
-            else:
-                content = []
-                for block in user_message:
-                    if isinstance(block, str):
-                        content.append({"type": "input_text", "text": block})
-                    else:
-                        content.append(block)
-            input_items.append({
-                "type": "message",
-                "role": "user",
-                "content": content,
-            })
-
-        # Build tools list — merge user-defined tools + built-in web_search
-        tools_payload: list[dict] = list(tools or [])
-        if web_search and web_search != "disabled":
-            tools_payload.append({"type": "web_search"})
-
-        if tools_payload:
-            tc: Any = tool_choice
-            ptc = parallel_tool_calls
-        else:
-            tc = "none"
-            ptc = False
-
-        payload: dict[str, Any] = {
-            "model": model,
-            "instructions": instructions,
-            "input": input_items,
-            "tools": tools_payload,
-            "tool_choice": tc,
-            "parallel_tool_calls": ptc,
-            "store": store,
-            "stream": True,
-            "include": ["reasoning.encrypted_content"] if include_reasoning else [],
-        }
-
-        if service_tier is not None:
-            payload["service_tier"] = service_tier
-        if prompt_cache_key is not None:
-            payload["prompt_cache_key"] = prompt_cache_key
-
-        if reasoning or reasoning_summary:
-            reasoning_block: dict[str, Any] = {}
-            if reasoning:
-                reasoning_block["effort"] = reasoning
-            if reasoning_summary:
-                reasoning_block["summary"] = reasoning_summary
-            payload["reasoning"] = reasoning_block
-
-        if output_schema is not None:
-            payload["text"] = {
-                "format": {
-                    "type": "json_schema",
-                    "strict": True,
-                    "schema": output_schema,
-                    "name": output_schema.get("title", "output"),
-                }
-            }
-        elif verbosity:
-            payload["text"] = {"verbosity": verbosity}
-
-        with self._session.post(
-            f"{BASE_URL}/responses",
-            json=payload,
-            headers={"Accept": "text/event-stream"},
-            stream=True,
-            timeout=120,
-        ) as resp:
-            resp.raise_for_status()
-            yield from _parse_sse_stream(resp)
-
-    def respond(
-        self,
-        user_message: Optional[MessageContent] = None,
-        *,
-        # Per-call params with session defaults
-        model: str = _UNSET,
-        instructions: str = _UNSET,
-        reasoning: Optional[ReasoningEffort] = _UNSET,
-        reasoning_summary: Optional[ReasoningSummary] = _UNSET,
-        verbosity: Optional[Verbosity] = _UNSET,
-        web_search: Optional[str] = _UNSET,
-        service_tier: Optional[ServiceTier] = _UNSET,
-        parallel_tool_calls: bool = _UNSET,
-        tools: Optional[list[dict]] = _UNSET,
-        store: bool = _UNSET,
-        # Always per-call
-        conversation_history: Optional[list[dict]] = None,
-        tool_choice: Union[str, dict] = "auto",
-        output_schema: Optional[dict] = None,
-        prompt_cache_key: Optional[str] = None,
-        print_stream: bool = False,
-    ) -> tuple[str, ResponseCompleted | None]:
-        """
-        Collect the full text from a streamed response.
-
-        Returns (text, ResponseCompleted).  For tool-calling scenarios use
-        stream() directly — respond() only captures text output.
-        """
-        text_parts: list[str] = []
-        completion: ResponseCompleted | None = None
-        for event in self.stream(
-            user_message,
-            model=model,
+        request = _ResponsesCreateRequest.from_openai_params(
+            client_defaults=self._client._defaults,
+            input=input,
+            include=include,
             instructions=instructions,
-            reasoning=reasoning,
-            reasoning_summary=reasoning_summary,
-            verbosity=verbosity,
-            web_search=web_search,
-            service_tier=service_tier,
+            model=model,
             parallel_tool_calls=parallel_tool_calls,
-            tools=tools,
-            store=store,
-            conversation_history=conversation_history,
-            tool_choice=tool_choice,
-            output_schema=output_schema,
             prompt_cache_key=prompt_cache_key,
-        ):
-            if isinstance(event, TextDelta):
-                text_parts.append(event.text)
-                if print_stream:
-                    print(event.text, end="", flush=True)
-            elif isinstance(event, ResponseCompleted):
-                completion = event
-            elif isinstance(event, ResponseFailed):
-                raise RuntimeError(f"[{event.code}] {event.message}")
-        if print_stream:
-            print()
-        return "".join(text_parts), completion
+            reasoning=reasoning,
+            service_tier=service_tier,
+            text=text,
+            tool_choice=tool_choice,
+            tools=tools,
+        )
+        response = self._client._post("/responses", body=request.payload, stream=True)
+        events = _stream_response_events(response)
+        stream_enabled = bool(stream) if _is_given(stream) else False
 
-    # ------------------------------------------------------------------
-    # Context compaction  POST /responses/compact
-    # ------------------------------------------------------------------
+        if stream_enabled:
+            return events
+        return _collect_response(events, request=request)
 
     def compact(
         self,
-        conversation_history: list[dict],
         *,
-        model: str = _UNSET,
-        instructions: str = _UNSET,
-    ) -> CompactionResult:
-        """
-        POST /responses/compact — compress a long conversation history.
-
-        Returns a CompactionResult whose output_items can be passed directly
-        as conversation_history to stream().  The compaction_summary item is
-        an encrypted blob understood by the model — treat it as opaque.
-
-        Typical use:
-            result = client.compact(long_history)
-            for event in client.stream("next question",
-                                       conversation_history=result.output_items):
-                ...
-        """
-        self._ensure_auth()
-        payload: dict[str, Any] = {
-            "model": self._resolve("model", model),
-            "instructions": self._resolve("instructions", instructions),
-            "input": conversation_history,
+        input: list[dict[str, Any]],
+        model: Any = _UNSET,
+        instructions: Any = _UNSET,
+    ) -> CompactedResponse:
+        payload = {
+            "model": _default(model, self._client._defaults["model"]),
+            "instructions": _default(instructions, self._client._defaults["instructions"]) or "",
+            "input": [_normalize_input_item(item) for item in input],
             "tools": [],
             "parallel_tool_calls": False,
         }
-        resp = self._session.post(
-            f"{BASE_URL}/responses/compact",
-            json=payload,
-            timeout=60,
+        data = self._client._post("/responses/compact", body=payload).json()
+        return CompactedResponse(id=data.get("id", ""), output=data.get("output", []))
+
+
+class Models:
+    def __init__(self, client: CodexClient) -> None:
+        self._client = client
+
+    def list(
+        self,
+        *,
+        extra_headers: Any = None,
+        extra_query: Any = None,
+        extra_body: Any = None,
+        timeout: Any = _UNSET,
+    ) -> SyncPage:
+        data = self._client._get("/models", params={"client_version": CLIENT_VERSION})
+        models = [_model_from_backend(item) for item in data.get("models", [])]
+        models.sort(key=lambda model: getattr(model, "priority", 0), reverse=True)
+        return SyncPage(data=models)
+
+    def retrieve(
+        self,
+        model: str,
+        *,
+        extra_headers: Any = None,
+        extra_query: Any = None,
+        extra_body: Any = None,
+        timeout: Any = _UNSET,
+    ) -> Model:
+        if not model:
+            raise ValueError(f"Expected a non-empty value for `model` but received {model!r}")
+        for candidate in self.list():
+            if candidate.id == model:
+                return candidate
+        raise LookupError(f"Model not found: {model}")
+
+
+class CodexResources:
+    """Codex-only endpoints that do not exist on the official OpenAI API."""
+
+    def __init__(self, client: CodexClient) -> None:
+        self._client = client
+
+    def usage(self) -> dict[str, Any]:
+        return self._client._get_wham("/wham/usage")
+
+
+class _ResponsesCreateRequest(CodexBaseModel):
+    model: str
+    instructions: Optional[str]
+    input: list[dict[str, Any]]
+    include: list[str]
+    parallel_tool_calls: bool
+    prompt_cache_key: Optional[str]
+    reasoning: Any
+    service_tier: Optional[str]
+    text: Any
+    tool_choice: Any
+    tools: list[dict[str, Any]]
+    payload: dict[str, Any]
+
+    @classmethod
+    def from_openai_params(
+        cls,
+        *,
+        client_defaults: dict[str, Any],
+        **params: Any,
+    ) -> "_ResponsesCreateRequest":
+        input_items = _normalize_input(params["input"])
+        tools = _normalize_tools(params["tools"])
+        include = (
+            []
+            if not _is_given(params["include"]) or params["include"] is None
+            else list(params["include"])
         )
-        resp.raise_for_status()
-        data = resp.json()
-        return CompactionResult(
-            response_id=data.get("id", ""),
-            output_items=data.get("output", []),
+        reasoning = None if not _is_given(params["reasoning"]) else params["reasoning"]
+        text = None if not _is_given(params["text"]) else params["text"]
+        tool_choice = "auto" if not _is_given(params["tool_choice"]) else params["tool_choice"]
+        parallel_tool_calls = (
+            bool(_default(params["parallel_tool_calls"], False)) if tools else False
+        )
+
+        payload = {
+            "model": _default(params["model"], client_defaults["model"]),
+            "instructions": _default(params["instructions"], client_defaults["instructions"]) or "",
+            "input": input_items,
+            "tools": tools,
+            "tool_choice": tool_choice if tools else "none",
+            "parallel_tool_calls": parallel_tool_calls,
+            "store": False,
+            "stream": True,
+            "include": include,
+        }
+
+        prompt_cache_key = (
+            None if not _is_given(params["prompt_cache_key"]) else params["prompt_cache_key"]
+        )
+        service_tier = None if not _is_given(params["service_tier"]) else params["service_tier"]
+        if prompt_cache_key is not None:
+            payload["prompt_cache_key"] = prompt_cache_key
+        if service_tier is not None:
+            payload["service_tier"] = service_tier
+        if reasoning is not None:
+            payload["reasoning"] = _normalize_reasoning(reasoning)
+        if text is not None:
+            payload["text"] = _normalize_text(text)
+
+        return cls(
+            model=payload["model"],
+            instructions=payload["instructions"],
+            input=input_items,
+            include=include,
+            parallel_tool_calls=payload["parallel_tool_calls"],
+            prompt_cache_key=prompt_cache_key,
+            reasoning=payload.get("reasoning"),
+            service_tier=service_tier,
+            text=payload.get("text"),
+            tool_choice=payload["tool_choice"],
+            tools=tools,
+            payload=payload,
         )
 
 
-# ---------------------------------------------------------------------------
-# SSE parser
-# ---------------------------------------------------------------------------
+def _stream_response_events(response: requests.Response) -> Iterator[ResponseStreamEvent]:
+    for payload in _iter_sse_payloads(response):
+        yield ResponseStreamEvent.model_validate(payload)
 
-def _parse_sse_stream(resp: requests.Response) -> Generator[StreamEvent, None, None]:
-    """
-    Parse a text/event-stream response and yield typed StreamEvent objects.
 
-    SSE wire format: "event: <name>" and "data: <json>" lines separated by
-    blank lines.  Mirrors codex-rs/codex-api/src/sse/responses.rs.
-    """
+def _iter_sse_payloads(response: requests.Response) -> Iterator[dict[str, Any]]:
     event_name: Optional[str] = None
     data_lines: list[str] = []
 
-    for raw_line in resp.iter_lines():
-        if isinstance(raw_line, bytes):
-            raw_line = raw_line.decode("utf-8")
-        if raw_line is None:
+    for raw_line in response.iter_lines():
+        line = raw_line.decode("utf-8") if isinstance(raw_line, bytes) else raw_line
+        if line is None:
             continue
-
-        if raw_line == "":
+        if line == "":
             if data_lines:
-                data = "\n".join(data_lines)
-                event = _dispatch_sse_event(event_name, data)
-                if event is not None:
-                    yield event
-                    if isinstance(event, ResponseCompleted):
-                        return
+                payload = _loads_sse_data(data_lines)
+                if payload is not None:
+                    payload.setdefault("type", event_name or "message")
+                    yield payload
             event_name = None
             data_lines = []
             continue
+        if line.startswith("event:"):
+            event_name = line[len("event:"):].strip()
+        elif line.startswith("data:"):
+            data_lines.append(line[len("data:"):].strip())
 
-        if raw_line.startswith("event:"):
-            event_name = raw_line[len("event:"):].strip()
-        elif raw_line.startswith("data:"):
-            data_lines.append(raw_line[len("data:"):].strip())
 
-
-def _dispatch_sse_event(
-    event_name: Optional[str], data: str
-) -> Optional[StreamEvent]:
-    """Map one SSE event onto a domain object; return None for ignored events."""
+def _loads_sse_data(data_lines: list[str]) -> Optional[dict[str, Any]]:
+    data = "\n".join(data_lines)
+    if data == "[DONE]":
+        return None
     try:
         payload = json.loads(data)
     except json.JSONDecodeError:
         return None
+    return payload if isinstance(payload, dict) else None
 
-    kind = event_name or payload.get("type", "")
 
-    if kind == "response.output_text.delta":
-        delta = payload.get("delta", "")
-        if delta:
-            return TextDelta(text=delta)
+def _collect_response(
+    events: Iterable[ResponseStreamEvent],
+    *,
+    request: _ResponsesCreateRequest,
+) -> Response:
+    output: list[dict[str, Any]] = []
+    text_parts: list[str] = []
+    completed: Optional[dict[str, Any]] = None
 
-    elif kind == "response.reasoning_summary_part.delta":
-        delta = payload.get("delta", "")
-        if delta:
-            return ReasoningDelta(
-                text=delta,
-                summary_index=payload.get("summary_index", 0),
-            )
+    for event in events:
+        if event.type in {"response.output_text.delta", "response.content_part.delta"}:
+            text_parts.append(_event_delta_text(event))
+        elif event.type == "response.output_item.done" and isinstance(
+            getattr(event, "item", None),
+            dict,
+        ):
+            output.append(event.item)
+        elif event.type == "response.completed":
+            completed = _event_response_dict(event)
+        elif event.type in {"response.failed", "error"}:
+            raise RuntimeError(_event_error_message(event))
 
-    elif kind == "response.output_item.done":
-        item = payload.get("item")
-        if item:
-            item_type = item.get("type")
-            if item_type == "function_call":
-                return ToolCall(
-                    call_id=item.get("call_id", ""),
-                    name=item.get("name", ""),
-                    arguments=item.get("arguments", "{}"),
-                    raw=item,
-                )
-            if item_type == "reasoning":
-                # Reasoning content is delivered as a completed item, not streaming deltas.
-                # encrypted_content is an opaque blob; summary text lives in "summary" list.
-                content = ""
-                for part in item.get("summary") or []:
-                    content += part.get("text", "")
-                encrypted = item.get("encrypted_content", "")
-                if content or encrypted:
-                    return ReasoningDelta(text=content or encrypted, summary_index=0)
-                return None
-            return OutputItem.from_dict(item)
+    if not any(item.get("type") == "message" for item in output) and text_parts:
+        output.append({
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "".join(text_parts)}],
+        })
 
-    elif kind == "response.completed":
-        r = payload.get("response", {})
-        raw_usage = r.get("usage") or {}
-        usage = TokenUsage(
-            input_tokens=raw_usage.get("input_tokens", 0),
-            output_tokens=raw_usage.get("output_tokens", 0),
-            total_tokens=raw_usage.get("total_tokens", 0),
-            reasoning_tokens=(raw_usage.get("output_tokens_details") or {}).get("reasoning_tokens", 0),
-            cached_tokens=(raw_usage.get("input_tokens_details") or {}).get("cached_tokens", 0),
+    raw = completed or {}
+    return Response(
+        id=raw.get("id", ""),
+        created_at=raw.get("created_at", time.time()),
+        completed_at=raw.get("completed_at", time.time()),
+        error=raw.get("error"),
+        incomplete_details=raw.get("incomplete_details"),
+        instructions=raw.get("instructions", request.instructions),
+        model=raw.get("model", request.model),
+        output=raw.get("output") or output,
+        parallel_tool_calls=raw.get("parallel_tool_calls", request.parallel_tool_calls),
+        tool_choice=raw.get("tool_choice", request.tool_choice),
+        tools=raw.get("tools", request.tools),
+        prompt_cache_key=raw.get("prompt_cache_key", request.prompt_cache_key),
+        prompt_cache_retention=raw.get("prompt_cache_retention"),
+        reasoning=raw.get("reasoning", request.reasoning),
+        service_tier=raw.get("service_tier", request.service_tier),
+        status=raw.get("status", "completed"),
+        text=raw.get("text", request.text),
+        usage=_usage_from_backend(raw.get("usage")),
+    )
+
+
+def _event_delta_text(event: ResponseStreamEvent) -> str:
+    delta = getattr(event, "delta", None)
+    if isinstance(delta, str):
+        return delta
+    if isinstance(delta, dict):
+        return delta.get("text", "")
+    return ""
+
+
+def _event_response_dict(event: ResponseStreamEvent) -> dict[str, Any]:
+    response = getattr(event, "response", None)
+    if isinstance(response, BaseModel):
+        return response.model_dump()
+    return response if isinstance(response, dict) else {}
+
+
+def _event_error_message(event: ResponseStreamEvent) -> str:
+    response = _event_response_dict(event)
+    error = response.get("error") or getattr(event, "error", None) or {}
+    if isinstance(error, dict):
+        return error.get("message", "Response failed")
+    return str(error)
+
+
+def _normalize_input(input_value: Any) -> list[dict[str, Any]]:
+    if not _is_given(input_value) or input_value is None:
+        return []
+    if isinstance(input_value, str):
+        return [_message("user", [{"type": "input_text", "text": input_value}])]
+    if isinstance(input_value, list):
+        return [_normalize_input_item(item) for item in input_value]
+    return [_normalize_input_item(input_value)]
+
+
+def _normalize_input_item(item: Any) -> dict[str, Any]:
+    raw = dict(item)
+    if raw.get("type") and raw.get("type") != "message":
+        return raw
+    if "role" not in raw:
+        return raw
+
+    role = raw["role"]
+    content = raw.get("content", [])
+    if isinstance(content, str):
+        content_type = "output_text" if role == "assistant" else "input_text"
+        content = [{"type": content_type, "text": content}]
+    elif isinstance(content, list):
+        content = [
+            {"type": "input_text", "text": part} if isinstance(part, str) else part
+            for part in content
+        ]
+    return _message(role, content)
+
+
+def _message(role: str, content: list[dict[str, Any]]) -> dict[str, Any]:
+    return {"type": "message", "role": role, "content": content}
+
+
+def _normalize_tools(tools: Any) -> list[dict[str, Any]]:
+    if not _is_given(tools) or tools is None:
+        return []
+    normalized = []
+    for tool in tools:
+        item = dict(tool)
+        if item.get("type") == "web_search":
+            item["type"] = "web_search_preview"
+        normalized.append(item)
+    return normalized
+
+
+def _normalize_reasoning(reasoning: Any) -> dict[str, Any]:
+    if isinstance(reasoning, dict):
+        return {key: value for key, value in reasoning.items() if value is not None}
+    return {
+        key: value
+        for key in ("effort", "summary")
+        if (value := getattr(reasoning, key, None)) is not None
+    }
+
+
+def _normalize_text(text: Any) -> dict[str, Any]:
+    text_dict = dict(text)
+    fmt = text_dict.get("format")
+    if isinstance(fmt, dict) and fmt.get("type") == "json_schema":
+        schema = fmt.get("schema")
+        if schema is not None and "title" not in schema and fmt.get("name"):
+            schema = {**schema, "title": fmt["name"]}
+        text_dict["format"] = {
+            "type": "json_schema",
+            "name": fmt.get("name") or (schema or {}).get("title", "output"),
+            "schema": schema,
+            "strict": fmt.get("strict", True),
+        }
+    return text_dict
+
+
+def _model_from_backend(raw: dict[str, Any]) -> Model:
+    return Model(
+        id=raw.get("slug", ""),
+        created=0,
+        owned_by="openai",
+        display_name=raw.get("display_name", raw.get("slug", "")),
+        description=raw.get("description", ""),
+        context_window=raw.get("context_window"),
+        supported_in_api=raw.get("supported_in_api", False),
+        priority=raw.get("priority", 0),
+        supports_reasoning_summaries=raw.get("supports_reasoning_summaries", False),
+        support_verbosity=raw.get("support_verbosity", False),
+        default_verbosity=raw.get("default_verbosity"),
+        default_reasoning_level=raw.get("default_reasoning_level"),
+        supported_reasoning_levels=raw.get("supported_reasoning_levels", []),
+        auto_compact_token_limit=raw.get("auto_compact_token_limit"),
+        prefer_websockets=raw.get("prefer_websockets", False),
+        input_modalities=raw.get("input_modalities", []),
+        available_in_plans=raw.get("available_in_plans", []),
+        base_instructions=raw.get("base_instructions", ""),
+        raw=raw,
+    )
+
+
+def _usage_from_backend(raw: Any) -> ResponseUsage:
+    raw = raw or {}
+    return ResponseUsage(
+        input_tokens=raw.get("input_tokens", 0),
+        output_tokens=raw.get("output_tokens", 0),
+        total_tokens=raw.get("total_tokens", 0),
+        input_tokens_details=TokenDetails(
+            cached_tokens=(raw.get("input_tokens_details") or {}).get("cached_tokens", 0),
+        ),
+        output_tokens_details=TokenDetails(
+            reasoning_tokens=(raw.get("output_tokens_details") or {}).get("reasoning_tokens", 0),
+        ),
+    )
+
+
+def _default(value: Any, default: Any) -> Any:
+    return default if not _is_given(value) else value
+
+
+def _is_given(value: Any) -> bool:
+    return value is not _UNSET and value.__class__.__name__ not in {"Omit", "NotGiven"}
+
+
+def _reject_backend_unsupported(**values: Any) -> None:
+    unsupported = [name for name, value in values.items() if _is_given(value) and value is not None]
+    if unsupported:
+        raise CodexBackendUnsupportedParameterError(
+            "The Codex backend rejects these official Responses parameters: "
+            f"{', '.join(sorted(unsupported))}."
         )
-        return ResponseCompleted(response_id=r.get("id", ""), usage=usage)
-
-    elif kind == "response.failed":
-        r = payload.get("response", {})
-        error = r.get("error") or {}
-        return ResponseFailed(
-            code=error.get("code", "unknown"),
-            message=error.get("message", "Unknown error"),
-        )
-
-    # Silently ignored: response.created, response.in_progress,
-    # response.output_item.added, response.content_part.*, rate_limits, …
-    return None
-
-

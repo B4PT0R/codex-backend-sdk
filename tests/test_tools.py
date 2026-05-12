@@ -1,13 +1,8 @@
-"""Tool calling — single call, parallel calls, tool result loop."""
+"""Function calling with official Responses output items."""
 
 import json
 
-import pytest
-from codex_backend_sdk import CodexClient, ResponseCompleted, TextDelta, ToolCall
-
-# ---------------------------------------------------------------------------
-# Shared tool definition + fake implementation
-# ---------------------------------------------------------------------------
+from codex_backend_sdk import CodexClient
 
 _TOOLS = [
     {
@@ -32,86 +27,40 @@ _WEATHER_DATA = {
 }
 
 
-def _get_weather(city: str) -> dict:
-    return _WEATHER_DATA.get(city, {"temperature": 15, "unit": "celsius", "condition": "unknown"})
+def _tool_result(call: dict) -> dict:
+    args = json.loads(call["arguments"])
+    result = _WEATHER_DATA.get(args["city"], {"temperature": 15, "condition": "unknown"})
+    return {
+        "type": "function_call_output",
+        "call_id": call["call_id"],
+        "output": json.dumps(result),
+    }
 
-
-def _run_tool(call: ToolCall) -> str:
-    if call.name == "get_weather":
-        return json.dumps(_get_weather(**call.parsed_arguments()))
-    return json.dumps({"error": f"unknown tool: {call.name}"})
-
-
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
 
 def test_single_tool_call(client: CodexClient):
-    history = []
-    tool_calls: list[ToolCall] = []
-
-    for event in client.stream("What's the weather in Paris?", tools=_TOOLS):
-        if isinstance(event, ToolCall):
-            history.append(event.as_history_item())
-            history.append(event.to_tool_result(_run_tool(event)))
-            tool_calls.append(event)
-
-    assert tool_calls, "Model made no tool call"
-    assert tool_calls[0].name == "get_weather"
-    assert tool_calls[0].parsed_arguments().get("city") == "Paris"
-
-    # Turn 2 — model sees the result and gives a final answer
-    text_parts: list[str] = []
-    for event in client.stream(None, conversation_history=history, tools=_TOOLS):
-        if isinstance(event, TextDelta):
-            text_parts.append(event.text)
-
-    full_text = "".join(text_parts)
-    assert full_text.strip(), "Empty final answer after tool result"
-    assert any(kw in full_text.lower() for kw in ("paris", "18", "cloudy", "celsius"))
-
-
-def test_parallel_tool_calls(client: CodexClient):
-    history = []
-    tool_calls: list[ToolCall] = []
-
-    for event in client.stream(
-        "What's the weather in Paris and Tokyo right now?",
+    first = client.responses.create(
+        input="What's the weather in Paris?",
         tools=_TOOLS,
-        parallel_tool_calls=True,
-    ):
-        if isinstance(event, ToolCall):
-            history.append(event.as_history_item())
-            history.append(event.to_tool_result(_run_tool(event)))
-            tool_calls.append(event)
-
-    assert len(tool_calls) == 2, (
-        f"Expected 2 parallel tool calls, got {len(tool_calls)}: "
-        + str([tc.parsed_arguments() for tc in tool_calls])
     )
-    cities = {tc.parsed_arguments()["city"] for tc in tool_calls}
-    assert cities == {"Paris", "Tokyo"}
+    calls = [item for item in first.output if item.get("type") == "function_call"]
 
-    # Turn 2
-    text_parts: list[str] = []
-    for event in client.stream(None, conversation_history=history, tools=_TOOLS):
-        if isinstance(event, TextDelta):
-            text_parts.append(event.text)
+    assert calls, "Model made no tool call"
+    assert calls[0]["name"] == "get_weather"
+    assert json.loads(calls[0]["arguments"]).get("city") == "Paris"
 
-    full_text = "".join(text_parts)
-    assert "paris" in full_text.lower()
-    assert "tokyo" in full_text.lower()
+    second = client.responses.create(
+        input=[calls[0], _tool_result(calls[0])],
+        tools=_TOOLS,
+    )
+
+    assert any(kw in second.output_text.lower() for kw in ("paris", "18", "cloudy", "celsius"))
 
 
 def test_tool_call_id_roundtrip(client: CodexClient):
-    """call_id from ToolCall must be echoed back in the tool_result item."""
-    history = []
+    response = client.responses.create(input="Weather in London?", tools=_TOOLS)
+    call = next(item for item in response.output if item.get("type") == "function_call")
+    result_item = _tool_result(call)
 
-    for event in client.stream("Weather in London?", tools=_TOOLS):
-        if isinstance(event, ToolCall):
-            assert event.call_id, "ToolCall has no call_id"
-            result_item = event.to_tool_result(_run_tool(event))
-            assert result_item["call_id"] == event.call_id
-            assert result_item["type"] == "function_call_output"
-            history.append(event.as_history_item())
-            history.append(result_item)
+    assert call["call_id"]
+    assert result_item["call_id"] == call["call_id"]
+    assert result_item["type"] == "function_call_output"

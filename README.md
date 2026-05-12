@@ -149,16 +149,147 @@ response = client.responses.create(
 )
 ```
 
-## Codex-Specific Endpoints
+## Supported Backend Endpoints
 
-Codex-only operations live under `client.codex`.
+The SDK exposes the supported backend endpoints through either OpenAI-shaped
+resources (`responses`, `models`) or Codex-only resources (`codex`).
+
+| Backend endpoint | SDK method | Notes |
+|---|---|---|
+| `POST /backend-api/codex/responses` | `client.responses.create(...)` | Stream-only backend; non-streaming SDK calls are collected from SSE events. |
+| `POST /backend-api/codex/responses/compact` | `client.responses.compact(...)` | Codex-specific helper for encrypted context compaction. |
+| `GET /backend-api/codex/models` | `client.models.list()` / `client.models.retrieve(...)` | OpenAI-shaped model objects with Codex metadata preserved as extra fields. |
+| `GET /backend-api/wham/usage` | `client.codex.usage()` | Codex/ChatGPT quota and rate-limit status. |
+
+### Responses
+
+`client.responses.create(...)` follows the official OpenAI Responses API where
+the Codex backend overlaps with it.
+
+Supported request fields:
+
+- `model`
+- `input`
+- `instructions`
+- `include`
+- `parallel_tool_calls`
+- `prompt_cache_key`
+- `reasoning`
+- `service_tier`
+- `store=False`
+- `stream`
+- `text`
+- `tool_choice`
+- `tools`
+
+The backend itself requires streaming. When `stream=True`, the SDK yields
+`ResponseStreamEvent` objects directly. When `stream` is omitted or false, the
+SDK consumes the SSE stream and returns a collected `Response`.
+
+```python
+response = client.responses.create(
+    model="gpt-5.4",
+    instructions="Be concise.",
+    input=[
+        {"role": "user", "content": "Summarize this API shape."},
+    ],
+    reasoning={"effort": "medium", "summary": "auto"},
+    include=["reasoning.encrypted_content"],
+    text={"verbosity": "medium"},
+    prompt_cache_key="session-123",
+)
+```
+
+Unsupported official Responses parameters are rejected explicitly with
+`CodexBackendUnsupportedParameterError`, including `temperature`, `top_p`,
+`max_output_tokens`, `metadata`, `user`, `safety_identifier`, `truncation`,
+`previous_response_id`, `conversation`, `background`, `prompt`,
+`prompt_cache_retention`, and `stream_options`.
+
+### Context Compaction
+
+`client.responses.compact(...)` is specific to the Codex backend. It compresses
+a long Responses-style input list into an opaque encrypted compaction summary
+that can be replayed in later `input` arrays.
+
+```python
+compacted = client.responses.compact(
+    model="gpt-5.4",
+    instructions="Keep task-critical context.",
+    input=history,
+)
+
+history = compacted.output
+```
+
+The returned `CompactedResponse.output` contains regular response items plus
+one or more `{"type": "compaction_summary", ...}` items. Treat those summaries
+as opaque backend state.
+
+### Models
+
+`client.models.list()` and `client.models.retrieve(model)` mirror the official
+OpenAI models resource, while preserving Codex-specific metadata as extra
+Pydantic fields.
+
+```python
+models = client.models.list()
+for model in models:
+    print(
+        model.id,
+        model.context_window,
+        model.supported_in_api,
+        model.supports_reasoning_summaries,
+    )
+```
+
+Common extra fields include:
+
+- `display_name`
+- `description`
+- `context_window`
+- `supported_in_api`
+- `supports_reasoning_summaries`
+- `support_verbosity`
+- `default_verbosity`
+- `default_reasoning_level`
+- `supported_reasoning_levels`
+- `auto_compact_token_limit`
+- `prefer_websockets`
+- `input_modalities`
+- `available_in_plans`
+- `base_instructions`
+- `priority`
+- `raw`
+
+### Quota And Usage
+
+`client.codex.usage()` calls the ChatGPT WHAM usage endpoint. It returns the raw
+quota payload from the backend because the shape contains plan-specific fields.
 
 ```python
 quota = client.codex.usage()
+primary = quota.get("rate_limit", {}).get("primary_window", {})
+print(primary.get("used_percent"))
 ```
 
-The backend currently rejects some official Responses parameters, including
-`temperature`, `top_p`, `max_output_tokens`, `metadata`, `user`,
-`safety_identifier`, `truncation`, and `previous_response_id`. The SDK raises
-`CodexBackendUnsupportedParameterError` for those instead of silently dropping
-them.
+Typical fields include:
+
+- `plan_type`
+- `rate_limit.allowed`
+- `rate_limit.limit_reached`
+- `rate_limit.primary_window`
+- `rate_limit.secondary_window`
+- `additional_rate_limits`
+- `credits`
+- `rate_limit_reached_type`
+
+### Observed But Not Exposed
+
+The reverse-engineering notes in `docs/backend-api.md` include additional
+observed endpoints. They are not exposed as SDK resources yet because they are
+plan-gated, unavailable on `chatgpt.com`, or not stable enough:
+
+- `POST /backend-api/codex/memories/trace_summarize`
+- `POST /backend-api/codex/realtime/calls`
+- `GET /backend-api/wham/config/requirements`

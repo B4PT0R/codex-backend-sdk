@@ -36,8 +36,10 @@ originator: codex_cli_rs
 
 List models available to this account.
 
+**SDK method**: `client.models.list()` / `client.models.retrieve(model)`
+
 **Query params**
-- `client_version` — SDK/CLI version string (e.g. `"0.1.0"`).
+- `client_version` — SDK/CLI version string (e.g. `"0.2.0"`).
 
 **Response** — JSON `{ "models": [ ModelObject, … ] }`
 
@@ -68,7 +70,12 @@ Key fields per model:
 
 ### `POST /codex/responses`
 
-Main inference endpoint. **Stream-only** — `stream: true` is mandatory; the backend never returns a non-streaming response.
+Main inference endpoint. **Stream-only** — `stream: true` is mandatory; the
+backend never returns a non-streaming HTTP response. In SDK calls,
+`client.responses.create(..., stream=False)` still returns a collected
+`Response`, but this is assembled client-side from the SSE stream.
+
+**SDK method**: `client.responses.create(...)`
 
 **Request body** (JSON):
 
@@ -197,8 +204,10 @@ Compact a long conversation into an encrypted summary the model can still read.
   ]
 }
 ```
-- `output` replaces the original history; pass it as `conversation_history` in subsequent calls.
+- `output` replaces the original history; pass it as `input` in subsequent calls.
 - The `compaction_summary` item is opaque on the client side.
+
+**SDK method**: `client.responses.compact(...)`
 
 ---
 
@@ -225,6 +234,8 @@ WHAM is the ChatGPT account/quota management layer, distinct from the Codex API.
 ### `GET /backend-api/wham/usage`
 
 Rate limits and quota for this account. Used as the auth probe — a 200 response confirms valid tokens.
+
+**SDK method**: `client.codex.usage()`
 
 **Response** — JSON:
 ```json
@@ -290,7 +301,7 @@ Remote control / agent-as-a-service websocket. Enrollment via:
 
 ## Input format (ResponseItem)
 
-Messages passed to `input` / `conversation_history`:
+Messages passed to `input`:
 
 **User message:**
 ```json

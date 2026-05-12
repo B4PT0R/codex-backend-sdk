@@ -223,7 +223,39 @@ Summarize traces into persistent memories.
 
 Realtime audio/video call initiation.
 
-**Status**: Returns `404 Not Found` — not deployed on the ChatGPT backend.
+**SDK method**: `client.realtime.calls.create(...)`
+
+**Status**: Supported. The SDK follows the official OpenAI SDK shape:
+
+- plain SDP offer: `client.realtime.calls.create(sdp=offer_sdp)`
+- SDP offer plus session payload:
+  `client.realtime.calls.create(sdp=offer_sdp, session={...})`
+
+The response is returned as binary SDP content with `.content`, `.text`,
+`.read()`, `.iter_bytes()`, and `.write_to_file(...)` helpers.
+
+---
+
+### Realtime WebSocket helpers
+
+The `codex-agent` realtime plugin uses OpenAI Realtime WebSocket sessions while
+sharing the Codex OAuth/token store.
+
+**SDK methods**:
+
+- `client.realtime_websocket_url(model="gpt-realtime-1.5")`
+- `client.realtime_websocket_headers(session_id="...")`
+
+The URL helper returns:
+
+```text
+wss://api.openai.com/v1/realtime?model=...
+```
+
+The headers helper returns `Authorization: Bearer <openai_api_key>` and
+`OpenAI-Beta: realtime=v1`. It requires the Codex auth store to contain
+`openai_api_key`; the default `authenticate(request_api_key=True)` flow requests
+and persists it.
 
 ---
 
@@ -343,7 +375,6 @@ Returned verbatim from `response.output_item.done` with `item.type = "function_c
   `max_output_tokens`, `metadata`, `user`, `safety_identifier`, `truncation`,
   penalties, and `previous_response_id` are rejected as unsupported parameters.
 - `tool_choice` field is **required** when `tools` is non-empty (omitting it causes a 400).
-- `realtime/calls` — 404, not deployed on chatgpt.com backend.
 - `memories/trace_summarize` — 403 on Plus; Pro/Enterprise only.
 - Reasoning tokens are billed separately from output tokens.
 - The `reasoning.summary` field only populates for models with `supports_reasoning_summaries: true` (e.g. `gpt-5.2`); on other models the field is absent and only `encrypted_content` is present.

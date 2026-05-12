@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+import urllib.parse
 from collections.abc import Iterable, Iterator
 from typing import Any, Literal, Optional
 
@@ -14,7 +15,7 @@ from .storage import TokenStore, load_tokens, save_tokens, token_needs_refresh
 
 BASE_URL = "https://chatgpt.com/backend-api/codex"
 WHAM_BASE_URL = "https://chatgpt.com/backend-api"
-CLIENT_VERSION = "0.1.0"
+CLIENT_VERSION = "0.2.0"
 ORIGINATOR = "codex_cli_rs"
 
 ReasoningEffort = Literal["minimal", "low", "medium", "high", "xhigh"]
@@ -36,6 +37,7 @@ __all__ = [
     "Response",
     "ResponseStreamEvent",
     "ResponseUsage",
+    "RealtimeCallResponse",
     "ServiceTier",
     "SyncPage",
     "TokenDetails",
@@ -199,6 +201,53 @@ class CompactedResponse(CodexBaseModel):
     output: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class RealtimeCallResponse:
+    """Binary SDP response returned by ``client.realtime.calls.create``.
+
+    This intentionally mirrors the useful parts of openai-python's
+    ``HttpxBinaryResponseContent`` while keeping ``requests`` as the local
+    transport.
+    """
+
+    def __init__(self, response: requests.Response) -> None:
+        self.response = response
+
+    @property
+    def content(self) -> bytes:
+        return self.response.content
+
+    @property
+    def text(self) -> str:
+        return self.response.text
+
+    @property
+    def encoding(self) -> Optional[str]:
+        return self.response.encoding
+
+    @encoding.setter
+    def encoding(self, value: Optional[str]) -> None:
+        self.response.encoding = value
+
+    def read(self) -> bytes:
+        return self.content
+
+    def json(self, **kwargs: Any) -> Any:
+        return self.response.json(**kwargs)
+
+    def iter_bytes(self, chunk_size: int = 1024) -> Iterator[bytes]:
+        return self.response.iter_content(chunk_size=chunk_size)
+
+    def iter_lines(self) -> Iterator[bytes]:
+        return self.response.iter_lines()
+
+    def close(self) -> None:
+        self.response.close()
+
+    def write_to_file(self, file: str) -> None:
+        with open(file, "wb") as handle:
+            handle.write(self.content)
+
+
 class CodexClient:
     """Client entrypoint intentionally shaped like ``openai.OpenAI``.
 
@@ -226,6 +275,7 @@ class CodexClient:
             self._session.headers.update(self._auth_headers())
         self.responses = Responses(self)
         self.models = Models(self)
+        self.realtime = Realtime(self)
         self.codex = CodexResources(self)
 
     def authenticate(self, *, request_api_key: bool = True) -> "CodexClient":
@@ -309,11 +359,58 @@ class CodexClient:
         response.raise_for_status()
         return response
 
+    def _post_raw(
+        self,
+        path: str,
+        *,
+        content: Optional[bytes] = None,
+        files: Any = None,
+        data: Any = None,
+        headers: Optional[dict[str, str]] = None,
+        params: Optional[dict[str, Any]] = None,
+        timeout: Any = _UNSET,
+    ) -> requests.Response:
+        self._ensure_auth()
+        response = self._session.post(
+            f"{BASE_URL}{path}",
+            data=content if files is None else data,
+            files=files,
+            headers=headers,
+            params=params,
+            timeout=self._timeout if not _is_given(timeout) else timeout,
+        )
+        response.raise_for_status()
+        return response
+
     def _get_wham(self, path: str) -> dict[str, Any]:
         self._ensure_auth()
         response = self._session.get(f"{WHAM_BASE_URL}{path}", timeout=30)
         response.raise_for_status()
         return response.json()
+
+    def realtime_websocket_url(self, *, model: str) -> str:
+        """Return the official OpenAI Realtime WebSocket URL for Codex plugins."""
+        if not model:
+            raise ValueError(f"Expected a non-empty value for `model` but received {model!r}")
+        return "wss://api.openai.com/v1/realtime?" + urllib.parse.urlencode({"model": model})
+
+    def realtime_websocket_headers(self, *, session_id: Optional[str] = None) -> dict[str, str]:
+        """Return headers for an OpenAI Realtime WebSocket connection.
+
+        Codex OAuth can mint and persist an OpenAI API key in ``~/.codex/auth.json``.
+        The realtime plugin in codex-agent uses that key for official Realtime
+        WebSocket sessions while sharing the Codex authentication lifecycle.
+        """
+        self._ensure_auth()
+        if self._store is None or not self._store.openai_api_key:
+            raise RuntimeError(
+                "Realtime WebSocket requires an OpenAI API key. "
+                "Call authenticate(request_api_key=True) to persist one."
+            )
+        return {
+            "Authorization": f"Bearer {self._store.openai_api_key}",
+            "OpenAI-Beta": "realtime=v1",
+        }
 
 
 OpenAI = CodexClient
@@ -455,6 +552,63 @@ class Models:
             if candidate.id == model:
                 return candidate
         raise LookupError(f"Model not found: {model}")
+
+
+class Realtime:
+    """Realtime resources matching the official OpenAI SDK surface where present."""
+
+    def __init__(self, client: CodexClient) -> None:
+        self._client = client
+        self.calls = RealtimeCalls(client)
+
+
+class RealtimeCalls:
+    def __init__(self, client: CodexClient) -> None:
+        self._client = client
+
+    def create(
+        self,
+        *,
+        sdp: str,
+        session: Any = _UNSET,
+        extra_headers: Optional[dict[str, str]] = None,
+        extra_query: Optional[dict[str, Any]] = None,
+        extra_body: Any = None,
+        timeout: Any = _UNSET,
+    ) -> RealtimeCallResponse:
+        if not sdp:
+            raise ValueError(f"Expected a non-empty value for `sdp` but received {sdp!r}")
+
+        if not _is_given(session):
+            response = self._client._post_raw(
+                "/realtime/calls",
+                content=sdp.encode("utf-8"),
+                headers={
+                    "Accept": "application/sdp",
+                    "Content-Type": "application/sdp",
+                    **(extra_headers or {}),
+                },
+                params=extra_query,
+                timeout=timeout,
+            )
+            return RealtimeCallResponse(response)
+
+        files = [
+            ("sdp", (None, sdp.encode("utf-8"), "application/sdp")),
+            (
+                "session",
+                (None, json.dumps(_jsonable(session)).encode("utf-8"), "application/json"),
+            ),
+        ]
+        response = self._client._post_raw(
+            "/realtime/calls",
+            files=files,
+            data=extra_body,
+            headers={"Accept": "application/sdp", **(extra_headers or {})},
+            params=extra_query,
+            timeout=timeout,
+        )
+        return RealtimeCallResponse(response)
 
 
 class CodexResources:
@@ -767,6 +921,16 @@ def _usage_from_backend(raw: Any) -> ResponseUsage:
             reasoning_tokens=(raw.get("output_tokens_details") or {}).get("reasoning_tokens", 0),
         ),
     )
+
+
+def _jsonable(value: Any) -> Any:
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json", by_alias=True, exclude_unset=True)
+    if isinstance(value, dict):
+        return {key: _jsonable(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_jsonable(item) for item in value]
+    return value
 
 
 def _default(value: Any, default: Any) -> Any:

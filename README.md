@@ -152,13 +152,15 @@ response = client.responses.create(
 ## Supported Backend Endpoints
 
 The SDK exposes the supported backend endpoints through either OpenAI-shaped
-resources (`responses`, `models`) or Codex-only resources (`codex`).
+resources (`responses`, `models`, `realtime`) or Codex-only resources (`codex`).
 
 | Backend endpoint | SDK method | Notes |
 |---|---|---|
 | `POST /backend-api/codex/responses` | `client.responses.create(...)` | Stream-only backend; non-streaming SDK calls are collected from SSE events. |
 | `POST /backend-api/codex/responses/compact` | `client.responses.compact(...)` | Codex-specific helper for encrypted context compaction. |
 | `GET /backend-api/codex/models` | `client.models.list()` / `client.models.retrieve(...)` | OpenAI-shaped model objects with Codex metadata preserved as extra fields. |
+| `POST /backend-api/codex/realtime/calls` | `client.realtime.calls.create(...)` | OpenAI-shaped SDP call creation for realtime sessions. |
+| `wss://api.openai.com/v1/realtime?model=...` | `client.realtime_websocket_url(...)` / `client.realtime_websocket_headers(...)` | Helper surface used by codex-agent's realtime plugin. |
 | `GET /backend-api/wham/usage` | `client.codex.usage()` | Codex/ChatGPT quota and rate-limit status. |
 
 ### Responses
@@ -262,6 +264,34 @@ Common extra fields include:
 - `priority`
 - `raw`
 
+### Realtime
+
+The SDK keeps the realtime surface available for integrations that bridge Codex
+auth with voice sessions.
+
+`client.realtime.calls.create(...)` mirrors the official OpenAI SDK call shape:
+
+```python
+answer = client.realtime.calls.create(
+    sdp=offer_sdp,
+    session={"type": "realtime", "model": "gpt-realtime-1.5"},
+)
+
+print(answer.text)
+```
+
+For WebSocket-based plugins such as `codex-agent`, the client also exposes small
+helpers that reuse the OpenAI API key stored by the Codex OAuth flow:
+
+```python
+url = client.realtime_websocket_url(model="gpt-realtime-1.5")
+headers = client.realtime_websocket_headers(session_id="voice-session")
+```
+
+`realtime_websocket_headers(...)` requires `~/.codex/auth.json` to contain
+`openai_api_key`. The default `authenticate(request_api_key=True)` flow stores
+that key when available.
+
 ### Quota And Usage
 
 `client.codex.usage()` calls the ChatGPT WHAM usage endpoint. It returns the raw
@@ -291,5 +321,4 @@ observed endpoints. They are not exposed as SDK resources yet because they are
 plan-gated, unavailable on `chatgpt.com`, or not stable enough:
 
 - `POST /backend-api/codex/memories/trace_summarize`
-- `POST /backend-api/codex/realtime/calls`
 - `GET /backend-api/wham/config/requirements`

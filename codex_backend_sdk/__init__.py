@@ -17,7 +17,7 @@ Quickstart:
     print(response.output_text)
 """
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 
 from .oauth import run_oauth_flow, refresh_access_token, obtain_api_key
 from .storage import load_tokens, save_tokens, TokenStore
@@ -38,7 +38,9 @@ from .codex_client import (
     Model,
     RawMemory,
     RawMemoryMetadata,
+    ParsedResponse,
     Response,
+    ResponseFormatJsonSchema,
     ResponseStreamEvent,
     ResponseUsage,
     RealtimeCallResponse,
@@ -61,9 +63,11 @@ __all__ = [
     "MemorySummarizeOutput",
     "MemorySummarizeResponse",
     "Model",
+    "ParsedResponse",
     "RawMemory",
     "RawMemoryMetadata",
     "Response",
+    "ResponseFormatJsonSchema",
     "ResponseStreamEvent",
     "ResponseUsage",
     "RealtimeCallResponse",

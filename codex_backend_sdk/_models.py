@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterator
-from typing import Any, Literal, Optional
+from typing import Any, Generic, Literal, Optional, TypeVar
 
 import requests
 from pydantic import BaseModel, ConfigDict, Field
@@ -13,6 +13,7 @@ ReasoningEffort = Literal["minimal", "low", "medium", "high", "xhigh"]
 ReasoningSummary = Literal["concise", "detailed", "auto"]
 Verbosity = Literal["low", "medium", "high"]
 ServiceTier = Literal["flex", "priority"]
+ParsedT = TypeVar("ParsedT")
 
 
 class CodexBaseModel(BaseModel):
@@ -73,6 +74,14 @@ class ResponseUsage(CodexBaseModel):
     output_tokens_details: TokenDetails = Field(default_factory=TokenDetails)
 
 
+class ResponseFormatJsonSchema(CodexBaseModel):
+    type: Literal["json_schema"] = "json_schema"
+    name: str
+    schema_: dict[str, Any] = Field(alias="schema")
+    strict: Optional[bool] = None
+    description: Optional[str] = None
+
+
 class Response(CodexBaseModel):
     id: str
     created_at: float = Field(default_factory=time.time)
@@ -116,6 +125,49 @@ class Response(CodexBaseModel):
                     if content.get("type") == "output_text":
                         texts.append(content.get("text", ""))
         return "".join(texts)
+
+    @property
+    def reasoning_summary(self) -> str | None:
+        texts: list[str] = []
+        for output in self.output:
+            if output.get("type") == "reasoning":
+                for summary in output.get("summary", []):
+                    if isinstance(summary, dict):
+                        texts.append(summary.get("text", ""))
+        return "\n".join(text for text in texts if text) or None
+
+    @property
+    def tool_calls(self) -> list[dict[str, Any]]:
+        return [output for output in self.output if output.get("type") == "function_call"]
+
+
+class ParsedResponse(CodexBaseModel, Generic[ParsedT]):
+    response: Response
+    output_parsed: ParsedT
+
+    @property
+    def id(self) -> str:
+        return self.response.id
+
+    @property
+    def model(self) -> Optional[str]:
+        return self.response.model
+
+    @property
+    def output(self) -> list[dict[str, Any]]:
+        return self.response.output
+
+    @property
+    def output_text(self) -> str:
+        return self.response.output_text
+
+    @property
+    def status(self) -> Optional[str]:
+        return self.response.status
+
+    @property
+    def usage(self) -> Optional[ResponseUsage]:
+        return self.response.usage
 
 
 class ResponseStreamEvent(CodexBaseModel):

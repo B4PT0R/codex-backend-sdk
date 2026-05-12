@@ -1,4 +1,8 @@
-from codex_backend_sdk import OpenAI, Response
+from dataclasses import dataclass
+
+from pydantic import BaseModel
+
+from codex_backend_sdk import OpenAI, ParsedResponse, Response
 
 
 class FakeSSE:
@@ -75,6 +79,34 @@ class FakeClient(OpenAI):
         )
 
 
+class ParsedPerson(BaseModel):
+    name: str
+    age: int
+
+
+@dataclass
+class TextOptions:
+    verbosity: str
+
+
+class ParseFakeClient(FakeClient):
+    def _post(self, path, *, body, stream=False):
+        self.posts.append((path, body, stream))
+        return FakeSSE([
+            (
+                'data: {"type":"response.output_text.delta","delta":'
+                '"{\\"name\\":\\"Ada\\",\\"age\\":37}"}'
+            ),
+            "",
+            (
+                'data: {"type":"response.completed","response":'
+                '{"id":"resp_parse","model":"gpt-test","output":[{"type":"message",'
+                '"role":"assistant","content":[{"type":"output_text",'
+                '"text":"{\\"name\\":\\"Ada\\",\\"age\\":37}"}]}]}}'
+            ),
+        ])
+
+
 def test_responses_create_collects_to_pydantic_response():
     client = FakeClient()
 
@@ -105,6 +137,75 @@ def test_responses_create_collects_to_pydantic_response():
     ]
     assert payload["reasoning"] == {"effort": "low", "summary": "auto"}
     assert payload["text"] == {"verbosity": "low"}
+
+
+def test_response_exposes_tool_calls_and_reasoning_summary():
+    response = Response(
+        id="resp_helpers",
+        output=[
+            {
+                "type": "reasoning",
+                "summary": [
+                    {"type": "summary_text", "text": "First"},
+                    {"type": "summary_text", "text": "Second"},
+                ],
+            },
+            {
+                "type": "function_call",
+                "call_id": "call_123",
+                "name": "lookup",
+                "arguments": "{}",
+            },
+        ],
+    )
+
+    assert response.reasoning_summary == "First\nSecond"
+    assert response.tool_calls == [
+        {
+            "type": "function_call",
+            "call_id": "call_123",
+            "name": "lookup",
+            "arguments": "{}",
+        }
+    ]
+
+
+def test_responses_parse_sends_strict_schema_and_returns_parsed_response():
+    client = ParseFakeClient()
+
+    parsed = client.responses.parse(
+        model="gpt-test",
+        input="Extract the person",
+        text_format=ParsedPerson,
+        text=TextOptions(verbosity="low"),
+    )
+
+    assert isinstance(parsed, ParsedResponse)
+    assert parsed.id == "resp_parse"
+    assert parsed.output_parsed == ParsedPerson(name="Ada", age=37)
+    path, payload, stream = client.posts[0]
+    assert path == "/responses"
+    assert stream is True
+    assert payload["text"]["verbosity"] == "low"
+    assert payload["text"]["format"]["type"] == "json_schema"
+    assert payload["text"]["format"]["name"] == "ParsedPerson"
+    assert payload["text"]["format"]["strict"] is True
+    assert payload["text"]["format"]["schema"]["additionalProperties"] is False
+
+
+def test_responses_parse_rejects_existing_text_format():
+    client = ParseFakeClient()
+
+    try:
+        client.responses.parse(
+            input="Extract",
+            text_format=ParsedPerson,
+            text={"format": {"type": "json_object"}},
+        )
+    except TypeError as exc:
+        assert "text_format" in str(exc)
+    else:
+        raise AssertionError("Expected TypeError")
 
 
 def test_responses_create_normalizes_official_input_items():

@@ -214,6 +214,30 @@ response = client.responses.create(
 )
 ```
 
+For structured output, `client.responses.parse(...)` accepts a Pydantic model,
+sends it as a strict JSON schema, and returns `ParsedResponse`:
+
+```python
+from pydantic import BaseModel
+
+
+class Person(BaseModel):
+    name: str
+    age: int
+
+
+parsed = client.responses.parse(
+    model="gpt-5.4",
+    input="Extract: Ada is 37 years old.",
+    text_format=Person,
+)
+print(parsed.output_parsed.name)
+```
+
+Collected responses expose convenience properties for common output items:
+`response.output_text`, `response.reasoning_summary`, and
+`response.tool_calls`.
+
 Unsupported official Responses parameters are rejected explicitly with
 `CodexBackendUnsupportedParameterError`, including `temperature`, `top_p`,
 `max_output_tokens`, `metadata`, `user`, `safety_identifier`, `truncation`,

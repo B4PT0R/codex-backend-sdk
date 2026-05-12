@@ -84,6 +84,10 @@ backend never returns a non-streaming HTTP response. In SDK calls,
 
 **SDK method**: `client.responses.create(...)`
 
+`client.responses.parse(..., text_format=MyPydanticModel)` is a convenience
+wrapper over the same endpoint. It populates `text.format` with a strict JSON
+schema and returns `ParsedResponse`.
+
 **Request body** (JSON):
 
 ```json

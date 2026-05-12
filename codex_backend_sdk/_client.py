@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import urllib.parse
-import time
 from typing import Any, Optional
 
 import requests
 
+from ._transport import request_with_retries
 from ._utils import _UNSET, _is_given
 from .storage import TokenStore, load_tokens, save_tokens, token_needs_refresh
 
@@ -271,37 +271,16 @@ class CodexClient:
         return response.json()
 
     def _request_with_retries(self, method: str, url: str, **kwargs: Any) -> requests.Response:
-        last_error: requests.RequestException | None = None
         use_session = kwargs.pop("_use_session", True)
-        for attempt in range(self._max_retries + 1):
-            try:
-                request = self._session.request if use_session else requests.request
-                response = request(method, url, **kwargs)
-                if self._should_retry_response(response, attempt):
-                    self._sleep_before_retry(response, attempt)
-                    continue
-                response.raise_for_status()
-                return response
-            except (requests.Timeout, requests.ConnectionError) as exc:
-                last_error = exc
-                if attempt >= self._max_retries:
-                    raise
-                self._sleep_before_retry(None, attempt)
-        if last_error is not None:
-            raise last_error
-        raise RuntimeError("Request retry loop exhausted")
-
-    def _should_retry_response(self, response: requests.Response, attempt: int) -> bool:
-        if attempt >= self._max_retries:
-            return False
-        return response.status_code == 429 or 500 <= response.status_code < 600
-
-    def _sleep_before_retry(self, response: requests.Response | None, attempt: int) -> None:
-        retry_after = response.headers.get("Retry-After") if response is not None else None
-        delay = _parse_retry_after(retry_after)
-        if delay is None:
-            delay = self._retry_base_delay * (2 ** attempt)
-        time.sleep(delay)
+        return request_with_retries(
+            self._session,
+            method,
+            url,
+            max_retries=self._max_retries,
+            retry_base_delay=self._retry_base_delay,
+            use_session=use_session,
+            **kwargs,
+        )
 
     def realtime_websocket_url(self, *, model: str) -> str:
         """Return the official OpenAI Realtime WebSocket URL for Codex plugins."""
@@ -324,12 +303,3 @@ class CodexClient:
 
 
 OpenAI = CodexClient
-
-
-def _parse_retry_after(value: str | None) -> float | None:
-    if not value:
-        return None
-    try:
-        return max(0.0, float(value))
-    except ValueError:
-        return None

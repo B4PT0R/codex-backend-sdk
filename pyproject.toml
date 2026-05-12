@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "codex-backend-sdk"
-version = "0.3.2"
+version = "0.3.3"
 description = "Unofficial Python SDK for the ChatGPT Codex backend API"
 readme = "README.md"
 license = { text = "MIT" }

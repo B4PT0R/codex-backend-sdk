@@ -1,6 +1,6 @@
 import requests
 
-import codex_backend_sdk._client as client_module
+import codex_backend_sdk._transport as transport_module
 from codex_backend_sdk import OpenAI
 
 
@@ -37,7 +37,7 @@ def _response(status_code, *, body=b"{}", headers=None):
 
 def test_retry_retries_5xx_then_returns_success(monkeypatch):
     sleeps = []
-    monkeypatch.setattr(client_module.time, "sleep", sleeps.append)
+    monkeypatch.setattr(transport_module.time, "sleep", sleeps.append)
     client = RetryClient([
         _response(503),
         _response(200, body=b'{"ok": true}'),
@@ -52,7 +52,7 @@ def test_retry_retries_5xx_then_returns_success(monkeypatch):
 
 def test_retry_honors_retry_after_header(monkeypatch):
     sleeps = []
-    monkeypatch.setattr(client_module.time, "sleep", sleeps.append)
+    monkeypatch.setattr(transport_module.time, "sleep", sleeps.append)
     client = RetryClient([
         _response(429, headers={"Retry-After": "1.5"}),
         _response(200),
@@ -66,7 +66,7 @@ def test_retry_honors_retry_after_header(monkeypatch):
 
 def test_retry_does_not_retry_client_errors(monkeypatch):
     sleeps = []
-    monkeypatch.setattr(client_module.time, "sleep", sleeps.append)
+    monkeypatch.setattr(transport_module.time, "sleep", sleeps.append)
     client = RetryClient([
         _response(400, body=b'{"error": "bad request"}'),
     ])
@@ -84,7 +84,7 @@ def test_retry_does_not_retry_client_errors(monkeypatch):
 
 def test_retry_retries_transport_timeout(monkeypatch):
     sleeps = []
-    monkeypatch.setattr(client_module.time, "sleep", sleeps.append)
+    monkeypatch.setattr(transport_module.time, "sleep", sleeps.append)
     client = RetryClient([
         requests.Timeout("temporary timeout"),
         _response(200, body=b'{"ok": true}'),

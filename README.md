@@ -161,7 +161,16 @@ resources (`responses`, `models`, `realtime`) or Codex-only resources (`codex`).
 | `GET /backend-api/codex/models` | `client.models.list()` / `client.models.retrieve(...)` | OpenAI-shaped model objects with Codex metadata preserved as extra fields. |
 | `POST /backend-api/codex/realtime/calls` | `client.realtime.calls.create(...)` | OpenAI-shaped SDP call creation for realtime sessions. |
 | `wss://api.openai.com/v1/realtime?model=...` | `client.realtime_websocket_url(...)` / `client.realtime_websocket_headers(...)` | Helper surface used by codex-agent's realtime plugin. |
+| `POST /v1/embeddings` | `client.embeddings.create(...)` | Uses the Codex OAuth access token against `api.openai.com`; verified with `text-embedding-3-small`. |
+| `POST /v1/audio/transcriptions` | `client.audio.transcriptions.create(...)` | Uses the Codex OAuth access token against `api.openai.com`; verified with `gpt-4o-mini-transcribe`. |
 | `GET /backend-api/wham/usage` | `client.codex.usage()` | Codex/ChatGPT quota and rate-limit status. |
+| `GET /backend-api/wham/tasks/list` | `client.codex.tasks.list(...)` | Raw Codex cloud task listing. |
+| `GET /backend-api/wham/tasks/{task_id}` | `client.codex.tasks.retrieve(task_id)` | Raw Codex cloud task detail. |
+| `GET /backend-api/wham/tasks/{task_id}/turns` | `client.codex.tasks.turns.list(task_id)` | Raw task turn mapping. |
+| `GET /backend-api/wham/tasks/{task_id}/turns/{turn_id}/sibling_turns` | `client.codex.tasks.turns.sibling_turns(task_id, turn_id)` | Raw sibling turn list. |
+| `GET /backend-api/wham/environments` | `client.codex.environments.list()` | Raw Codex cloud environment list. |
+| `GET /backend-api/memories` | `client.codex.memories.list()` | Raw ChatGPT memory payload for the authenticated account. |
+| `GET /backend-api/user_system_messages` | `client.codex.user_system_messages.retrieve()` | Raw ChatGPT customization/system-message payload. |
 
 ### Responses
 
@@ -292,6 +301,37 @@ headers = client.realtime_websocket_headers(session_id="voice-session")
 `openai_api_key`. The default `authenticate(request_api_key=True)` flow stores
 that key when available.
 
+### Embeddings
+
+`client.embeddings.create(...)` mirrors the official OpenAI embeddings resource
+and sends the Codex OAuth access token directly to `api.openai.com/v1`.
+
+```python
+embedding = client.embeddings.create(
+    model="text-embedding-3-small",
+    input="Embed this sentence.",
+    dimensions=256,
+)
+
+print(embedding.data[0].embedding)
+```
+
+### Audio Transcriptions
+
+`client.audio.transcriptions.create(...)` mirrors the official OpenAI
+transcriptions resource for non-streaming calls.
+
+```python
+with open("meeting.wav", "rb") as audio:
+    transcription = client.audio.transcriptions.create(
+        model="gpt-4o-mini-transcribe",
+        file=("meeting.wav", audio, "audio/wav"),
+        response_format="json",
+    )
+
+print(transcription.text)
+```
+
 ### Quota And Usage
 
 `client.codex.usage()` calls the ChatGPT WHAM usage endpoint. It returns the raw
@@ -314,6 +354,34 @@ Typical fields include:
 - `credits`
 - `rate_limit_reached_type`
 
+### Codex Cloud Tasks
+
+The `client.codex.tasks` and `client.codex.environments` namespaces expose
+read-only WHAM cloud-task payloads as raw backend dictionaries.
+
+```python
+tasks = client.codex.tasks.list(limit=10)
+task = client.codex.tasks.retrieve(tasks["items"][0]["id"])
+turns = client.codex.tasks.turns.list(task["task"]["id"])
+environments = client.codex.environments.list()
+```
+
+Supported task-list filters are `limit`, `cursor`, `task_filter`, and
+`environment_id`.
+
+### ChatGPT Account Data
+
+The `client.codex` namespace also exposes read-only ChatGPT account data that is
+not part of the official OpenAI SDK.
+
+```python
+memories = client.codex.memories.list()
+customization = client.codex.user_system_messages.retrieve()
+```
+
+Both methods return raw backend dictionaries because these payloads can contain
+personal account-specific fields and may change without notice.
+
 ### Observed But Not Exposed
 
 The reverse-engineering notes in `docs/backend-api.md` include additional
@@ -322,3 +390,5 @@ plan-gated, unavailable on `chatgpt.com`, or not stable enough:
 
 - `POST /backend-api/codex/memories/trace_summarize`
 - `GET /backend-api/wham/config/requirements`
+- `POST /v1/audio/speech` (auth reaches the endpoint, but Pro OAuth lacks
+  `api.model.audio.request` in current tests)

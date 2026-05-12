@@ -17,13 +17,16 @@ Quickstart:
     print(response.output_text)
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 from .oauth import run_oauth_flow, refresh_access_token, obtain_api_key
 from .storage import load_tokens, save_tokens, TokenStore
 from .codex_client import (
     CodexBackendUnsupportedParameterError,
     CodexBaseModel,
+    CreateEmbeddingResponse,
+    Embedding,
+    EmbeddingUsage,
     ReasoningEffort,
     ReasoningSummary,
     ServiceTier,
@@ -37,6 +40,7 @@ from .codex_client import (
     RealtimeCallResponse,
     SyncPage,
     CompactedResponse,
+    Transcription,
     image_url,
     image_b64,
 )
@@ -46,6 +50,9 @@ __all__ = [
     "OpenAI",
     "CodexBackendUnsupportedParameterError",
     "CodexBaseModel",
+    "CreateEmbeddingResponse",
+    "Embedding",
+    "EmbeddingUsage",
     "Model",
     "Response",
     "ResponseStreamEvent",
@@ -53,6 +60,7 @@ __all__ = [
     "RealtimeCallResponse",
     "SyncPage",
     "CompactedResponse",
+    "Transcription",
     "ReasoningEffort",
     "ReasoningSummary",
     "ServiceTier",

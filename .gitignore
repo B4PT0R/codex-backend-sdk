@@ -10,3 +10,4 @@ build/
 venv/
 .pytest_cache/
 .claude/
+.vscode/

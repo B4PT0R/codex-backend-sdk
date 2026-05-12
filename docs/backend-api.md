@@ -1,7 +1,7 @@
 # Codex Backend API — Reverse-Engineering Notes
 
 Sourced from live observation and `codex-rs` source (`openai/codex`).  
-Last updated: 2026-04-22.
+Last updated: 2026-05-12.
 
 ---
 
@@ -11,6 +11,7 @@ Last updated: 2026-04-22.
 |---|---|
 | Codex API (direct) | `https://chatgpt.com/backend-api/codex` |
 | WHAM (account/quota) | `https://chatgpt.com/backend-api` |
+| OpenAI API with Codex OAuth | `https://api.openai.com/v1` |
 
 ---
 
@@ -27,6 +28,9 @@ originator: codex_cli_rs
 - `access_token` and `account_id` come from `~/.codex/auth.json` (written by the OAuth flow).
 - `account_id` is extracted from the `id_token` JWT claim `https://api.openai.com/auth` → `chatgpt_account_id`.
 - Tokens are obtained via ChatGPT OAuth 2.0 + PKCE (issuer: `https://auth.openai.com`, client_id: `app_EMoamEEZ73f0CkXaXp7hrann`).
+- Some `api.openai.com/v1` endpoints accept the ChatGPT OAuth access token
+  directly. In observed Pro-plan tests, `POST /v1/embeddings` and
+  `POST /v1/audio/transcriptions` work with `Authorization: Bearer <access_token>`.
 
 ---
 
@@ -39,7 +43,7 @@ List models available to this account.
 **SDK method**: `client.models.list()` / `client.models.retrieve(model)`
 
 **Query params**
-- `client_version` — SDK/CLI version string (e.g. `"0.2.0"`).
+- `client_version` — SDK/CLI version string (e.g. `"0.3.0"`).
 
 **Response** — JSON `{ "models": [ ModelObject, … ] }`
 
@@ -259,6 +263,44 @@ and persists it.
 
 ---
 
+## OpenAI API Endpoints With Codex OAuth
+
+These endpoints live under `https://api.openai.com/v1`, not the ChatGPT backend,
+but they work with the same Codex OAuth access token stored in
+`~/.codex/auth.json`.
+
+### `POST /v1/embeddings`
+
+**SDK method**: `client.embeddings.create(...)`
+
+**Status**: Supported. Verified with:
+
+```json
+{
+  "model": "text-embedding-3-small",
+  "input": "ping",
+  "dimensions": 3
+}
+```
+
+The response matches the official embeddings shape:
+`{ "object": "list", "data": [{ "object": "embedding", ... }], "usage": ... }`.
+
+### `POST /v1/audio/transcriptions`
+
+**SDK method**: `client.audio.transcriptions.create(...)`
+
+**Status**: Supported for non-streaming calls. Verified with multipart upload
+using `gpt-4o-mini-transcribe`.
+
+### `POST /v1/audio/speech`
+
+**Status**: Observed but not exposed. A malformed request reaches payload
+validation, but a valid Pro-plan request currently returns `401` with missing
+`api.model.audio.request` scope.
+
+---
+
 ## WHAM endpoints
 
 WHAM is the ChatGPT account/quota management layer, distinct from the Codex API.
@@ -308,6 +350,8 @@ Fetch managed requirements/config for this account (plan-gated settings).
 
 List cloud tasks (Pro/Enterprise cloud execution feature).
 
+**SDK method**: `client.codex.tasks.list(...)`
+
 **Query params**: `limit`, `task_filter`, `environment_id`, `cursor`.
 
 ---
@@ -316,11 +360,40 @@ List cloud tasks (Pro/Enterprise cloud execution feature).
 
 Get details for a specific cloud task.
 
+**SDK method**: `client.codex.tasks.retrieve(task_id)`
+
+Observed response includes `task`, `current_user_turn`,
+`current_assistant_turn`, and `current_diff_task_turn`.
+
+---
+
+### `GET /backend-api/wham/tasks/{task_id}/turns`
+
+List task turns as a mapping.
+
+**SDK method**: `client.codex.tasks.turns.list(task_id)`
+
+Observed response includes `turn_mapping` and `current_turn_id`.
+
 ---
 
 ### `GET /backend-api/wham/tasks/{task_id}/turns/{turn_id}/sibling_turns`
 
 List sibling turns for a task turn.
+
+**SDK method**: `client.codex.tasks.turns.sibling_turns(task_id, turn_id)`
+
+---
+
+### `GET /backend-api/wham/environments`
+
+List Codex cloud environments for the authenticated account.
+
+**SDK method**: `client.codex.environments.list()`
+
+Observed response is a raw list of environment objects, including repository
+metadata, network settings, permissions, and cache settings. Secrets are present
+as backend metadata, not plaintext values.
 
 ---
 
@@ -328,6 +401,46 @@ List sibling turns for a task turn.
 
 Remote control / agent-as-a-service websocket. Enrollment via:  
 `POST /backend-api/wham/remote/control/server/enroll`
+
+---
+
+## ChatGPT Account Data
+
+These endpoints are under `https://chatgpt.com/backend-api`, not
+`/backend-api/codex`. They return account-level ChatGPT data and are exposed
+under `client.codex` as raw dictionaries.
+
+### `GET /backend-api/memories`
+
+**SDK method**: `client.codex.memories.list()`
+
+**Status**: Supported. Returns a payload shaped like:
+
+```json
+{
+  "memories": [
+    {
+      "id": "mem_...",
+      "content": "...",
+      "updated_at": "...",
+      "status": "..."
+    }
+  ],
+  "memory_max_tokens": 12000,
+  "memory_num_tokens": 123
+}
+```
+
+Memory items may include additional fields such as `conversation_id`,
+`created_timestamp`, `gizmo_id`, `last_updated`, and `labels`.
+
+### `GET /backend-api/user_system_messages`
+
+**SDK method**: `client.codex.user_system_messages.retrieve()`
+
+**Status**: Supported. Returns the raw ChatGPT customization payload, including
+fields such as `enabled`, `about_user_message`, `about_model_message`,
+`traits_model_message`, `disabled_tools`, and personality-related settings.
 
 ---
 

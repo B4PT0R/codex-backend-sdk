@@ -62,7 +62,12 @@ class CodexClient:
         self.files = Files(self)
         self.codex = CodexResources(self)
 
-    def authenticate(self, *, request_api_key: bool = True) -> "CodexClient":
+    def authenticate(
+        self,
+        *,
+        request_api_key: bool = True,
+        interactive: bool = True,
+    ) -> "CodexClient":
         from .oauth import refresh_access_token, run_oauth_flow
 
         def refresh(store: TokenStore) -> Optional[TokenStore]:
@@ -87,8 +92,27 @@ class CodexClient:
                 self._set_store(store)
                 return self
 
+        if not interactive:
+            raise RuntimeError("No usable stored Codex credentials; interactive login required.")
+
         self._set_store(run_oauth_flow(request_api_key=request_api_key))
         return self
+
+    @property
+    def authenticated(self) -> bool:
+        """Whether this client currently has OAuth credentials loaded."""
+        return bool(self._store and self._store.account_id)
+
+    def account_info(self) -> dict[str, Any]:
+        """Return safe non-secret account metadata decoded from stored tokens."""
+        store = self._store
+        authenticated = bool(store and store.account_id)
+        return {
+            "authenticated": authenticated,
+            "account_id": store.account_id if store else None,
+            "email": store.email if store else None,
+            "plan_type": store.plan_type if store else None,
+        }
 
     def _set_store(self, store: TokenStore) -> None:
         self._store = store

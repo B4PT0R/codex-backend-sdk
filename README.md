@@ -329,6 +329,14 @@ headers = client.realtime_websocket_headers(session_id="voice-session")
 `openai_api_key`. The default `authenticate(request_api_key=True)` flow stores
 that key when available.
 
+For non-interactive checks, you can avoid triggering a browser login flow:
+
+```python
+client = OpenAI().authenticate(interactive=False)
+print(client.authenticated)
+print(client.account_info())
+```
+
 ### Embeddings
 
 `client.embeddings.create(...)` mirrors the official OpenAI embeddings resource

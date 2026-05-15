@@ -295,7 +295,7 @@ def test_responses_compact_sends_shared_request_fields():
                 "content": [{"type": "input_text", "text": "Long context"}],
             }
         ],
-        "tools": [{"type": "web_search_preview"}],
+        "tools": [{"type": "web_search"}],
         "parallel_tool_calls": True,
         "reasoning": {"effort": "medium"},
         "service_tier": "priority",

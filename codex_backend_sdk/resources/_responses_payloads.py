@@ -175,13 +175,7 @@ def normalize_input_item(item: Any) -> dict[str, Any]:
 def normalize_tools(tools: Any) -> list[dict[str, Any]]:
     if not _is_given(tools) or tools is None:
         return []
-    normalized = []
-    for tool in tools:
-        item = _as_dict(tool)
-        if item.get("type") == "web_search":
-            item["type"] = "web_search_preview"
-        normalized.append(item)
-    return normalized
+    return [_as_dict(tool) for tool in tools]
 
 
 def normalize_reasoning(reasoning: Any) -> dict[str, Any]:

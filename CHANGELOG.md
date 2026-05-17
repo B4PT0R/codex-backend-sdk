@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.5] - 2026-05-18
+
+### Fixed
+- Preserved `usage` on `client.responses.compact(...)` results so `CompactedResponse` exposes backend token accounting.
+
+### Tests
+- Added coverage to verify compact responses retain `input_tokens`, `output_tokens`, and `total_tokens`.
+
 ## [0.3.4] - 2026-05-15
 
 ### Added

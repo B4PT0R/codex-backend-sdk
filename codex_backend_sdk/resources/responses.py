@@ -10,6 +10,7 @@ from .._streaming import stream_response_events
 from .._utils import _UNSET, _default, _is_given, _reject_backend_unsupported
 from ._responses_payloads import (
     ResponsesCreateRequest,
+    _usage_from_backend,
     collect_response,
     merge_text_format,
     normalize_input_item,
@@ -221,4 +222,9 @@ class Responses:
         if _is_given(text) and text is not None:
             payload["text"] = normalize_text(text)
         data = self._client._post("/responses/compact", body=payload).json()
-        return CompactedResponse(id=data.get("id", ""), output=data.get("output", []))
+        return CompactedResponse(
+            id=data.get("id", ""),
+            object=data.get("object", "response.compacted"),
+            output=data.get("output", []),
+            usage=_usage_from_backend(data.get("usage")),
+        )

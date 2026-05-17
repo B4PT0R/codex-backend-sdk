@@ -17,7 +17,7 @@ Quickstart:
     print(response.output_text)
 """
 
-__version__ = "0.3.4"
+__version__ = "0.3.5"
 
 from .oauth import run_oauth_flow, refresh_access_token, obtain_api_key
 from .storage import load_tokens, save_tokens, TokenStore

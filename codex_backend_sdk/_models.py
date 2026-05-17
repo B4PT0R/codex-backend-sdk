@@ -258,6 +258,7 @@ class CompactedResponse(CodexBaseModel):
     id: str
     object: str = "response.compacted"
     output: list[dict[str, Any]] = Field(default_factory=list)
+    usage: Optional[ResponseUsage] = Field(default_factory=ResponseUsage)
 
 
 class BinaryResponseContent:

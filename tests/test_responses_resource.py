@@ -39,6 +39,7 @@ class FakeClient(OpenAI):
             return FakeJSONResponse({
                 "id": "resp_123",
                 "output": [{"type": "message", "content": []}],
+                "usage": {"input_tokens": 11, "output_tokens": 7, "total_tokens": 18},
             })
         return FakeSSE([
             'data: {"type":"response.content_part.delta","delta":{"text":"hel"}}',
@@ -282,6 +283,10 @@ def test_responses_compact_sends_shared_request_fields():
     )
 
     assert compacted.id == "resp_123"
+    assert compacted.usage is not None
+    assert compacted.usage.input_tokens == 11
+    assert compacted.usage.output_tokens == 7
+    assert compacted.usage.total_tokens == 18
     path, payload, stream = client.posts[0]
     assert path == "/responses/compact"
     assert stream is False

@@ -66,3 +66,22 @@ def test_authenticate_non_interactive_without_tokens_raises(monkeypatch):
         assert "interactive login required" in str(exc)
     else:
         raise AssertionError("Expected RuntimeError")
+
+
+def test_authenticate_force_runs_interactive_flow(monkeypatch):
+    expected = _store()
+    monkeypatch.setattr("codex_backend_sdk._client.load_tokens", lambda: _store())
+    monkeypatch.setattr("codex_backend_sdk.oauth.run_oauth_flow", lambda: expected)
+
+    client = CodexClient().authenticate(force=True)
+
+    assert client._store is expected
+
+
+def test_authenticate_force_requires_interactive_mode():
+    try:
+        CodexClient().authenticate(force=True, interactive=False)
+    except ValueError as exc:
+        assert "interactive=True" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError")

@@ -283,7 +283,7 @@ sharing the Codex OAuth/token store.
 **SDK methods**:
 
 - `client.realtime_websocket_url(model="gpt-realtime-1.5")`
-- `client.realtime_websocket_headers(session_id="...")`
+- `client.realtime.websocket_headers(session_id="...")`
 
 The URL helper returns:
 
@@ -291,10 +291,11 @@ The URL helper returns:
 wss://api.openai.com/v1/realtime?model=...
 ```
 
-The headers helper returns `Authorization: Bearer <openai_api_key>` and
-`OpenAI-Beta: realtime=v1`. It requires the Codex auth store to contain
-`openai_api_key`; the default `authenticate(request_api_key=True)` flow requests
-and persists it.
+The headers helper returns `Authorization: Bearer <openai_api_key>`, the Codex
+originator, and the optional session id. Interactive ChatGPT OAuth attempts to
+exchange its fresh ID token for this Realtime API key and persists it when the
+account is entitled to one. If that exchange is unavailable, regular Codex OAuth
+continues to work but Voice v2 requires a separately provisioned API key.
 
 ---
 

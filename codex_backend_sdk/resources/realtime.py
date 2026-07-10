@@ -1,6 +1,8 @@
 """Realtime resources."""
 
 from __future__ import annotations
+
+import os
 from typing import Any, Optional, TYPE_CHECKING
 
 from .._models import RealtimeCallResponse
@@ -16,6 +18,20 @@ class Realtime:
     def __init__(self, client: CodexClient) -> None:
         self._client = client
         self.calls = RealtimeCalls(client)
+
+    def websocket_headers(self, *, session_id: Optional[str] = None) -> dict[str, str]:
+        """Return Voice v2 headers backed by an available Realtime API key."""
+        store = self._client._store
+        api_key = (store.openai_api_key if store else None) or os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError("Realtime Voice v2 requires an OpenAI API key.")
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "originator": "codex_cli_rs",
+        }
+        if session_id:
+            headers["x-session-id"] = session_id
+        return headers
 
 
 class RealtimeCalls:

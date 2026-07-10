@@ -65,28 +65,38 @@ class CodexClient:
     def authenticate(
         self,
         *,
-        request_api_key: bool = True,
         interactive: bool = True,
+        force: bool = False,
     ) -> "CodexClient":
-        from .oauth import refresh_access_token, run_oauth_flow
+        from .oauth import obtain_api_key, refresh_access_token, run_oauth_flow
 
         def refresh(store: TokenStore) -> Optional[TokenStore]:
             try:
                 data = refresh_access_token(store.refresh_token)
+                id_token = data.get("id_token", store.id_token_raw)
+                api_key = store.openai_api_key
+                if not api_key and data.get("id_token"):
+                    try:
+                        api_key = obtain_api_key(id_token)
+                    except Exception:
+                        pass
                 refreshed = TokenStore.from_exchange(
                     access_token=data.get("access_token", store.access_token),
                     refresh_token=data.get("refresh_token", store.refresh_token),
-                    id_token=data.get("id_token", store.id_token_raw),
-                    api_key=store.openai_api_key,
+                    id_token=id_token,
+                    openai_api_key=api_key,
                 )
                 save_tokens(refreshed)
                 return refreshed
             except Exception:
                 return None
 
-        store = load_tokens()
+        if force and not interactive:
+            raise ValueError("Forced authentication requires interactive=True.")
+
+        store = None if force else load_tokens()
         if store is not None:
-            if token_needs_refresh(store) and store.refresh_token:
+            if (token_needs_refresh(store) or not store.openai_api_key) and store.refresh_token:
                 store = refresh(store) or store
             if not token_needs_refresh(store) or self._probe_auth(store):
                 self._set_store(store)
@@ -95,7 +105,7 @@ class CodexClient:
         if not interactive:
             raise RuntimeError("No usable stored Codex credentials; interactive login required.")
 
-        self._set_store(run_oauth_flow(request_api_key=request_api_key))
+        self._set_store(run_oauth_flow())
         return self
 
     @property
@@ -311,19 +321,6 @@ class CodexClient:
         if not model:
             raise ValueError(f"Expected a non-empty value for `model` but received {model!r}")
         return "wss://api.openai.com/v1/realtime?" + urllib.parse.urlencode({"model": model})
-
-    def realtime_websocket_headers(self, *, session_id: Optional[str] = None) -> dict[str, str]:
-        """Return headers for an OpenAI Realtime WebSocket connection."""
-        self._ensure_auth()
-        if self._store is None or not self._store.openai_api_key:
-            raise RuntimeError(
-                "Realtime WebSocket requires an OpenAI API key. "
-                "Call authenticate(request_api_key=True) to persist one."
-            )
-        return {
-            "Authorization": f"Bearer {self._store.openai_api_key}",
-            "OpenAI-Beta": "realtime=v1",
-        }
 
 
 OpenAI = CodexClient

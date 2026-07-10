@@ -29,13 +29,12 @@ class FakeRealtimeClient(OpenAI):
             refresh_token="refresh-token",
             id_token_raw="id-token",
             account_id="account-id",
-            openai_api_key="sk-test",
+            openai_api_key="realtime-key",
         ))
 
     def _post_raw(self, path, **kwargs):
         self.raw_posts.append((path, kwargs))
         return FakeResponse()
-
 
 def test_realtime_calls_create_posts_plain_sdp_like_official_sdk():
     client = FakeRealtimeClient()
@@ -68,13 +67,37 @@ def test_realtime_calls_create_posts_session_as_backend_json():
     assert kwargs["headers"]["Accept"] == "application/sdp"
 
 
-def test_realtime_websocket_helpers_match_codex_agent_plugin_contract():
+def test_realtime_websocket_uses_api_key_exchanged_during_oauth():
     client = FakeRealtimeClient()
 
+    assert client.realtime.websocket_headers(session_id="session-123") == {
+        "Authorization": "Bearer realtime-key",
+        "originator": "codex_cli_rs",
+        "x-session-id": "session-123",
+    }
     assert client.realtime_websocket_url(model="gpt-realtime-1.5") == (
         "wss://api.openai.com/v1/realtime?model=gpt-realtime-1.5"
     )
-    assert client.realtime_websocket_headers(session_id="session-123") == {
-        "Authorization": "Bearer sk-test",
-        "OpenAI-Beta": "realtime=v1",
-    }
+
+
+def test_realtime_websocket_falls_back_to_environment_api_key(monkeypatch):
+    client = FakeRealtimeClient()
+    client._store.openai_api_key = None
+    monkeypatch.setenv("OPENAI_API_KEY", "environment-key")
+
+    assert client.realtime.websocket_headers()["Authorization"] == (
+        "Bearer environment-key"
+    )
+
+
+def test_realtime_websocket_requires_api_key(monkeypatch):
+    client = FakeRealtimeClient()
+    client._store.openai_api_key = None
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    try:
+        client.realtime.websocket_headers()
+    except RuntimeError as exc:
+        assert str(exc) == "Realtime Voice v2 requires an OpenAI API key."
+    else:
+        raise AssertionError("Expected missing Realtime credentials to fail")

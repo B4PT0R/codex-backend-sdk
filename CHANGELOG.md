@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.6] - 2026-07-11
+
+### Added
+- Added Voice v2 WebSocket headers through `client.realtime.websocket_headers(...)`, using the API key stored by OAuth when available or `OPENAI_API_KEY` as a fallback.
+- Added `authenticate(force=True)` for explicit interactive reauthentication.
+
+### Changed
+- ChatGPT OAuth now attempts the same optional ID-token-to-API-key exchange as Codex CLI and persists the result in the official `OPENAI_API_KEY` auth field.
+- Removed the legacy `request_api_key` authentication option; API-key acquisition is now an internal OAuth concern and never prevents regular Codex login.
+
+### Tests
+- Added coverage for forced authentication and Realtime credential selection/error behavior.
+
 ## [0.3.5] - 2026-05-18
 
 ### Fixed

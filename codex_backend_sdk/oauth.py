@@ -150,48 +150,22 @@ def _exchange_code(code: str, pkce: PkceCodes) -> dict:
     return resp.json()
 
 
-def obtain_api_key(id_token: str, access_token: Optional[str] = None) -> Optional[str]:
-    """
-    Exchange an id_token (or access_token fallback) for an OpenAI API key.
-    Returns the API key string, or None on failure.
-
-    Some accounts (personal API Platform orgs) don't embed organization_id in
-    the id_token. We first try with the id_token; if that fails with an org
-    error, we retry using the access_token (already scoped to api.openai.com/v1).
-    """
-    def _exchange(subject: str, token_type: str) -> Optional[str]:
-        resp = requests.post(
-            f"{ISSUER}/oauth/token",
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-            data={
-                "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
-                "client_id": CLIENT_ID,
-                "requested_token": "openai-api-key",
-                "subject_token": subject,
-                "subject_token_type": token_type,
-            },
-            timeout=30,
-        )
-        if resp.ok:
-            return resp.json().get("access_token")
-        short_type = token_type.split(":")[-1]
-        print(f"[auth] {short_type} exchange → {resp.status_code}: {resp.text}")
-        return None
-
-    try:
-        key = _exchange(id_token, "urn:ietf:params:oauth:token-type:id_token")
-        if key:
-            return key
-
-        if access_token:
-            print("[auth] retrying with access_token…")
-            key = _exchange(access_token, "urn:ietf:params:oauth:token-type:access_token")
-            if key:
-                return key
-
-    except Exception as exc:
-        print(f"[auth] API key exchange error: {exc}")
-    return None
+def obtain_api_key(id_token: str) -> str:
+    """Exchange a fresh ChatGPT ID token for the API key used by Realtime."""
+    resp = requests.post(
+        f"{ISSUER}/oauth/token",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        data={
+            "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
+            "client_id": CLIENT_ID,
+            "requested_token": "openai-api-key",
+            "subject_token": id_token,
+            "subject_token_type": "urn:ietf:params:oauth:token-type:id_token",
+        },
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.json()["access_token"]
 
 
 def refresh_access_token(refresh_token: str) -> dict:
@@ -217,7 +191,6 @@ def refresh_access_token(refresh_token: str) -> dict:
 def run_oauth_flow(
     *,
     open_browser: bool = True,
-    request_api_key: bool = True,
     persist: bool = True,
     workspace_id: Optional[str] = None,
     scopes: Optional[str] = None,
@@ -226,8 +199,7 @@ def run_oauth_flow(
     Run the full OAuth authorization-code + PKCE flow.
 
     Opens the browser (unless open_browser=False), waits for the callback,
-    exchanges the code for tokens, optionally fetches an API key,
-    and saves everything to ~/.codex/auth.json.
+    exchanges the code for OAuth tokens and saves them to ~/.codex/auth.json.
 
     Returns a TokenStore with all credentials.
     """
@@ -278,18 +250,16 @@ def run_oauth_flow(
     refresh_token = raw["refresh_token"]
     id_token = raw["id_token"]
 
-    api_key: Optional[str] = None
-    if request_api_key:
-        print("[auth] Exchanging for OpenAI API key …")
-        api_key = obtain_api_key(id_token, access_token)
-        if api_key:
-            print(f"[auth] API key obtained: {api_key[:8]}…")
+    try:
+        openai_api_key = obtain_api_key(id_token)
+    except requests.HTTPError:
+        openai_api_key = None
 
     store = TokenStore.from_exchange(
         access_token=access_token,
         refresh_token=refresh_token,
         id_token=id_token,
-        api_key=api_key,
+        openai_api_key=openai_api_key,
     )
 
     if persist:

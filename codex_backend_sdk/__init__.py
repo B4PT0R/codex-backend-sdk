@@ -17,9 +17,9 @@ Quickstart:
     print(response.output_text)
 """
 
-__version__ = "0.3.5"
+__version__ = "0.3.6"
 
-from .oauth import run_oauth_flow, refresh_access_token, obtain_api_key
+from .oauth import run_oauth_flow, refresh_access_token
 from .storage import load_tokens, save_tokens, TokenStore
 from .codex_client import (
     CodexBackendUnsupportedParameterError,
@@ -83,7 +83,6 @@ __all__ = [
     "image_b64",
     "run_oauth_flow",
     "refresh_access_token",
-    "obtain_api_key",
     "load_tokens",
     "save_tokens",
     "TokenStore",

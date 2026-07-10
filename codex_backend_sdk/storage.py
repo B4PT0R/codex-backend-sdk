@@ -66,7 +66,7 @@ class TokenStore:
         access_token: str,
         refresh_token: str,
         id_token: str,
-        api_key: Optional[str] = None,
+        openai_api_key: Optional[str] = None,
     ) -> "TokenStore":
         claims = _extract_openai_claims(id_token)
         access_claims = _extract_openai_claims(access_token)
@@ -76,7 +76,7 @@ class TokenStore:
             refresh_token=refresh_token,
             id_token_raw=id_token,
             account_id=claims.get("chatgpt_account_id"),
-            openai_api_key=api_key,
+            openai_api_key=openai_api_key,
             last_refresh=datetime.now(timezone.utc).isoformat(),
             email=_decode_jwt_payload(id_token).get("email"),
             plan_type=access_claims.get("chatgpt_plan_type"),
@@ -119,7 +119,7 @@ def save_tokens(store: TokenStore) -> None:
 
     payload = {
         "auth_mode": "chatgpt",
-        "openai_api_key": store.openai_api_key,
+        "OPENAI_API_KEY": store.openai_api_key,
         "tokens": {
             "access_token": store.access_token,
             "refresh_token": store.refresh_token,
@@ -159,7 +159,7 @@ def load_tokens() -> Optional[TokenStore]:
         refresh_token=refresh_token,
         id_token_raw=id_token,
         account_id=tokens.get("account_id"),
-        openai_api_key=data.get("openai_api_key"),
+        openai_api_key=data.get("OPENAI_API_KEY") or data.get("openai_api_key"),
         last_refresh=data.get("last_refresh"),
         email=_decode_jwt_payload(id_token).get("email"),
         plan_type=_extract_openai_claims(access_token).get("chatgpt_plan_type"),

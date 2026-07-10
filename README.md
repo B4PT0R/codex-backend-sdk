@@ -161,7 +161,7 @@ resources (`responses`, `models`, `realtime`) or Codex-only resources (`codex`).
 | `POST /backend-api/codex/memories/trace_summarize` | `client.codex.memories.trace_summarize(...)` | Raw Codex memory trace summarization helper. |
 | `GET /backend-api/codex/models` | `client.models.list()` / `client.models.retrieve(...)` | OpenAI-shaped model objects with Codex metadata preserved as extra fields. |
 | `POST /backend-api/codex/realtime/calls` | `client.realtime.calls.create(...)` | OpenAI-shaped SDP call creation for realtime sessions. |
-| `wss://api.openai.com/v1/realtime?model=...` | `client.realtime_websocket_url(...)` / `client.realtime_websocket_headers(...)` | Helper surface used by codex-agent's realtime plugin. |
+| `wss://api.openai.com/v1/realtime?model=...` | `client.realtime_websocket_url(...)` / `client.realtime.websocket_headers(...)` | Voice v2 helpers; requires a Realtime API key obtained during OAuth or supplied by the auth store. |
 | `POST /v1/embeddings` | `client.embeddings.create(...)` | Uses the Codex OAuth access token against `api.openai.com`; verified with `text-embedding-3-small`. |
 | `POST /v1/audio/transcriptions` | `client.audio.transcriptions.create(...)` | Uses the Codex OAuth access token against `api.openai.com`; verified with `gpt-4o-mini-transcribe`. |
 | `GET /backend-api/wham/usage` | `client.codex.usage()` | Codex/ChatGPT quota and rate-limit status. |
@@ -317,17 +317,18 @@ answer = client.realtime.calls.create(
 print(answer.text)
 ```
 
-For WebSocket-based plugins such as `codex-agent`, the client also exposes small
-helpers that reuse the OpenAI API key stored by the Codex OAuth flow:
+For WebSocket-based plugins such as `codex-agent`, the client also exposes the
+Voice v2 connection details:
 
 ```python
 url = client.realtime_websocket_url(model="gpt-realtime-1.5")
-headers = client.realtime_websocket_headers(session_id="voice-session")
+headers = client.realtime.websocket_headers(session_id="voice-session")
 ```
 
-`realtime_websocket_headers(...)` requires `~/.codex/auth.json` to contain
-`openai_api_key`. The default `authenticate(request_api_key=True)` flow stores
-that key when available.
+During interactive ChatGPT OAuth login, the SDK exchanges the fresh ID token for
+the temporary API key required by Realtime and stores it with the other local
+credentials. Existing credentials created by older SDK versions may require one
+forced interactive login before these headers are available.
 
 For non-interactive checks, you can avoid triggering a browser login flow:
 

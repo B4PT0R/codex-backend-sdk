@@ -1,15 +1,19 @@
-"""OpenAI v1 resources that accept the Codex OAuth access token."""
+"""OpenAI-shaped resources authenticated through the Codex ChatGPT session."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from typing import Any, Optional, TYPE_CHECKING
 
-import requests
-
-from .._models import CreateEmbeddingResponse, ResponseStreamEvent, Transcription
-from .._streaming import stream_response_events
-from .._utils import _UNSET, _add_given, _coerce_file, _form_value, _is_given, _jsonable
+from .._models import CreateEmbeddingResponse, Transcription
+from .._utils import (
+    _UNSET,
+    CodexBackendUnsupportedParameterError,
+    _add_given,
+    _coerce_file,
+    _form_value,
+    _is_given,
+    _jsonable,
+)
 
 if TYPE_CHECKING:
     from .._client import CodexClient
@@ -85,42 +89,50 @@ class AudioTranscriptions:
         extra_query: Optional[dict[str, Any]] = None,
         extra_body: Any = None,
         timeout: Any = _UNSET,
-    ) -> str | Transcription | Iterator[ResponseStreamEvent]:
+    ) -> str | Transcription:
         if not model:
             raise ValueError(f"Expected a non-empty value for `model` but received {model!r}")
 
+        if _is_given(response_format) and response_format not in {None, "json", "text"}:
+            raise CodexBackendUnsupportedParameterError(
+                "The ChatGPT transcription backend supports only `json` and `text` response formats."
+            )
+
+        unsupported = {
+            "chunking_strategy": chunking_strategy,
+            "include": include,
+            "known_speaker_names": known_speaker_names,
+            "known_speaker_references": known_speaker_references,
+            "stream": stream,
+            "timestamp_granularities": timestamp_granularities,
+        }
+        given_unsupported = [
+            name for name, value in unsupported.items()
+            if _is_given(value) and value not in {None, False}
+        ]
+        if given_unsupported:
+            raise CodexBackendUnsupportedParameterError(
+                "The ChatGPT transcription backend does not support: "
+                + ", ".join(sorted(given_unsupported))
+            )
+
         data = {"model": model}
-        _add_given(data, "chunking_strategy", chunking_strategy)
-        _add_given(data, "include", include)
-        _add_given(data, "known_speaker_names", known_speaker_names)
-        _add_given(data, "known_speaker_references", known_speaker_references)
         _add_given(data, "language", language)
         _add_given(data, "prompt", prompt)
         _add_given(data, "response_format", response_format)
-        _add_given(data, "stream", stream)
         _add_given(data, "temperature", temperature)
-        _add_given(data, "timestamp_granularities", timestamp_granularities)
         if extra_body:
             data.update(_jsonable(extra_body))
 
-        stream_enabled = bool(stream) if _is_given(stream) else False
-        response = self._client._post_openai_raw(
-            "/audio/transcriptions",
+        response = self._client._post_chatgpt_raw(
+            "/transcribe",
             files={"file": _coerce_file(file)},
             data={key: _form_value(value) for key, value in data.items()},
             headers=extra_headers,
             params=extra_query,
             timeout=timeout,
-            stream=stream_enabled,
         )
-        if stream_enabled:
-            return stream_response_events(response)
-        if _wants_text_response(response_format, response):
-            return response.text
-        return Transcription.model_validate(response.json())
-
-
-def _wants_text_response(response_format: Any, response: requests.Response) -> bool:
-    if _is_given(response_format) and response_format in {"text", "srt", "vtt"}:
-        return True
-    return "json" not in response.headers.get("content-type", "")
+        transcription = Transcription.model_validate(response.json())
+        if _is_given(response_format) and response_format == "text":
+            return transcription.text
+        return transcription

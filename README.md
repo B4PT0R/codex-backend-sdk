@@ -162,8 +162,8 @@ resources (`responses`, `models`, `realtime`) or Codex-only resources (`codex`).
 | `GET /backend-api/codex/models` | `client.models.list()` / `client.models.retrieve(...)` | OpenAI-shaped model objects with Codex metadata preserved as extra fields. |
 | `POST /backend-api/codex/realtime/calls` | `client.realtime.calls.create(...)` | Experimental SDP call creation. The protocol is implemented by Codex, but ChatGPT routing is rollout-dependent and may return `404 Not Found`. |
 | `wss://api.openai.com/v1/realtime?model=...` | `client.realtime_websocket_url(...)` / `client.realtime.websocket_headers(...)` | Voice v2 helpers; requires a Realtime API key obtained during OAuth or supplied by the auth store. |
-| `POST /v1/embeddings` | `client.embeddings.create(...)` | Uses the Codex OAuth access token against `api.openai.com`; verified with `text-embedding-3-small`. |
-| `POST /v1/audio/transcriptions` | `client.audio.transcriptions.create(...)` | Uses the Codex OAuth access token against `api.openai.com`; verified with `gpt-4o-mini-transcribe`. |
+| `POST /v1/embeddings` | `client.embeddings.create(...)` | Uses the Codex OAuth access token against `api.openai.com`; usage is charged to the associated OpenAI Platform organization. |
+| `POST /backend-api/transcribe` | `client.audio.transcriptions.create(...)` | Uses the authenticated ChatGPT backend for non-streaming batch transcription; no developer API key is required. |
 | `GET /backend-api/wham/usage` | `client.codex.usage()` | Codex/ChatGPT quota and rate-limit status. |
 | `GET /backend-api/wham/config/requirements` | `client.codex.config.requirements()` | Raw managed requirements/config payload for the authenticated account. |
 | `GET /backend-api/wham/tasks/list` | `client.codex.tasks.list(...)` | Raw Codex cloud task listing. |

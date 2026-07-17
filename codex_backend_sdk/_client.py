@@ -295,14 +295,33 @@ class CodexClient:
         body: dict[str, Any],
         timeout: Any = _UNSET,
     ) -> dict[str, Any]:
+        response = self._post_chatgpt_raw(path, body=body, timeout=timeout)
+        return response.json()
+
+    def _post_chatgpt_raw(
+        self,
+        path: str,
+        *,
+        body: Optional[dict[str, Any]] = None,
+        files: Any = None,
+        data: Any = None,
+        headers: Optional[dict[str, str]] = None,
+        params: Optional[dict[str, Any]] = None,
+        timeout: Any = _UNSET,
+    ) -> requests.Response:
         self._ensure_auth()
         response = self._request_with_retries(
             "POST",
             f"{CHATGPT_BASE_URL}{path}",
-            json=body,
+            json=body if files is None and data is None else None,
+            files=files,
+            data=data,
+            headers=headers,
+            params=params,
             timeout=self._timeout if not _is_given(timeout) else timeout,
         )
-        return response.json()
+        response.raise_for_status()
+        return response
 
     def _request_with_retries(self, method: str, url: str, **kwargs: Any) -> requests.Response:
         use_session = kwargs.pop("_use_session", True)

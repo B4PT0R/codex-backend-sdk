@@ -306,11 +306,12 @@ continues to work but Voice v2 requires a separately provisioned API key.
 
 ---
 
-## OpenAI API Endpoints With Codex OAuth
+## Embeddings and Transcription
 
-These endpoints live under `https://api.openai.com/v1`, not the ChatGPT backend,
-but they work with the same Codex OAuth access token stored in
-`~/.codex/auth.json`.
+These OpenAI-shaped resources deliberately use different upstreams. Embeddings
+remain an OpenAI Platform call and consume the associated developer-account
+quota. Batch transcription uses the authenticated ChatGPT backend and does not
+require a developer API key.
 
 ### `POST /v1/embeddings`
 
@@ -328,13 +329,20 @@ but they work with the same Codex OAuth access token stored in
 
 The response matches the official embeddings shape:
 `{ "object": "list", "data": [{ "object": "embedding", ... }], "usage": ... }`.
+The request is accounted against the OpenAI Platform organization returned by
+the API; ChatGPT OAuth authenticates it but does not include it in a ChatGPT
+subscription.
 
-### `POST /v1/audio/transcriptions`
+### `POST /backend-api/transcribe`
 
 **SDK method**: `client.audio.transcriptions.create(...)`
 
-**Status**: Supported for non-streaming calls. Verified with multipart upload
-using `gpt-4o-mini-transcribe`.
+**Status**: Supported for non-streaming ChatGPT batch transcription. The SDK
+uploads multipart audio with the OAuth bearer and `ChatGPT-Account-ID`, and
+supports the `model`, `language`, `prompt`, `temperature`, and `json`/`text`
+response options used by Codex Agent. Streaming, timestamps, speaker references,
+chunking, SRT, and VTT are rejected locally rather than falling back to a
+billable Platform endpoint.
 
 ### `POST /v1/audio/speech`
 

@@ -1,4 +1,7 @@
+import pytest
+
 from codex_backend_sdk import CreateEmbeddingResponse, OpenAI, Transcription
+from codex_backend_sdk._utils import CodexBackendUnsupportedParameterError
 from codex_backend_sdk.storage import TokenStore
 
 
@@ -20,7 +23,7 @@ class FakeOpenAIClient(OpenAI):
     def __init__(self):
         super().__init__(model="gpt-test")
         self.openai_posts = []
-        self.openai_raw_posts = []
+        self.chatgpt_raw_posts = []
         self._set_store(TokenStore(
             access_token="chatgpt-token",
             refresh_token="refresh-token",
@@ -37,8 +40,8 @@ class FakeOpenAIClient(OpenAI):
             "usage": {"prompt_tokens": 1, "total_tokens": 1},
         }
 
-    def _post_openai_raw(self, path, **kwargs):
-        self.openai_raw_posts.append((path, kwargs, self._openai_headers()))
+    def _post_chatgpt_raw(self, path, **kwargs):
+        self.chatgpt_raw_posts.append((path, kwargs, self._auth_headers()))
         return FakeJSONResponse()
 
 
@@ -65,7 +68,7 @@ def test_embeddings_create_posts_to_openai_with_codex_oauth_token():
     assert headers["Authorization"] == "Bearer chatgpt-token"
 
 
-def test_audio_transcriptions_create_posts_multipart_like_official_sdk():
+def test_audio_transcriptions_create_posts_to_chatgpt_backend():
     client = FakeOpenAIClient()
 
     response = client.audio.transcriptions.create(
@@ -77,8 +80,8 @@ def test_audio_transcriptions_create_posts_multipart_like_official_sdk():
 
     assert isinstance(response, Transcription)
     assert response.text == "hello"
-    path, kwargs, headers = client.openai_raw_posts[0]
-    assert path == "/audio/transcriptions"
+    path, kwargs, headers = client.chatgpt_raw_posts[0]
+    assert path == "/transcribe"
     assert kwargs["files"]["file"] == ("clip.wav", b"wav", "audio/wav")
     assert kwargs["data"] == {
         "model": "gpt-4o-mini-transcribe",
@@ -86,3 +89,34 @@ def test_audio_transcriptions_create_posts_multipart_like_official_sdk():
         "response_format": "json",
     }
     assert headers["Authorization"] == "Bearer chatgpt-token"
+    assert headers["ChatGPT-Account-ID"] == "account-id"
+
+
+def test_audio_transcriptions_text_format_returns_string():
+    client = FakeOpenAIClient()
+
+    response = client.audio.transcriptions.create(
+        model="gpt-4o-mini-transcribe",
+        file=("clip.wav", b"wav", "audio/wav"),
+        response_format="text",
+    )
+
+    assert response == "hello"
+
+
+def test_audio_transcriptions_rejects_unsupported_options():
+    client = FakeOpenAIClient()
+
+    with pytest.raises(CodexBackendUnsupportedParameterError, match="stream"):
+        client.audio.transcriptions.create(
+            model="gpt-4o-mini-transcribe",
+            file=("clip.wav", b"wav", "audio/wav"),
+            stream=True,
+        )
+
+    with pytest.raises(CodexBackendUnsupportedParameterError, match="json.*text"):
+        client.audio.transcriptions.create(
+            model="gpt-4o-mini-transcribe",
+            file=("clip.wav", b"wav", "audio/wav"),
+            response_format="srt",
+        )

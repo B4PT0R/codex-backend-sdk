@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.8] - 2026-07-17
+
+### Changed
+- Routed `client.audio.transcriptions.create(...)` through the ChatGPT-native `/backend-api/transcribe` endpoint instead of the billable Platform `/v1/audio/transcriptions` endpoint.
+- Preserved the OpenAI-shaped `json` and `text` response behavior used by Codex Agent while rejecting unsupported streaming, timestamp, speaker, chunking, SRT, and VTT options explicitly.
+- Added a reusable raw ChatGPT multipart request helper to the client transport.
+
+### Documentation
+- Clarified that embeddings still use the OpenAI Platform endpoint and its developer-account quota, while batch transcription now uses the authenticated ChatGPT backend.
+
+### Tests
+- Added coverage for ChatGPT transcription routing, account authentication headers, text responses, and unsupported parameters.
+
 ## [0.3.7] - 2026-07-17
 
 ### Added

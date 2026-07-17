@@ -160,7 +160,7 @@ resources (`responses`, `models`, `realtime`) or Codex-only resources (`codex`).
 | `POST /backend-api/codex/responses/compact` | `client.responses.compact(...)` | Codex-specific helper for encrypted context compaction. |
 | `POST /backend-api/codex/memories/trace_summarize` | `client.codex.memories.trace_summarize(...)` | Raw Codex memory trace summarization helper. |
 | `GET /backend-api/codex/models` | `client.models.list()` / `client.models.retrieve(...)` | OpenAI-shaped model objects with Codex metadata preserved as extra fields. |
-| `POST /backend-api/codex/realtime/calls` | `client.realtime.calls.create(...)` | OpenAI-shaped SDP call creation for realtime sessions. |
+| `POST /backend-api/codex/realtime/calls` | `client.realtime.calls.create(...)` | Experimental SDP call creation. The protocol is implemented by Codex, but ChatGPT routing is rollout-dependent and may return `404 Not Found`. |
 | `wss://api.openai.com/v1/realtime?model=...` | `client.realtime_websocket_url(...)` / `client.realtime.websocket_headers(...)` | Voice v2 helpers; requires a Realtime API key obtained during OAuth or supplied by the auth store. |
 | `POST /v1/embeddings` | `client.embeddings.create(...)` | Uses the Codex OAuth access token against `api.openai.com`; verified with `text-embedding-3-small`. |
 | `POST /v1/audio/transcriptions` | `client.audio.transcriptions.create(...)` | Uses the Codex OAuth access token against `api.openai.com`; verified with `gpt-4o-mini-transcribe`. |

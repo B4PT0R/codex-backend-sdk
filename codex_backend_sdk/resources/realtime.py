@@ -35,6 +35,12 @@ class Realtime:
 
 
 class RealtimeCalls:
+    """Experimental Codex WebRTC call creation.
+
+    Availability depends on the Realtime call route enabled for the authenticated
+    ChatGPT account. A correctly authenticated request may still return 404 while
+    the backend is not rolled out.
+    """
     def __init__(self, client: CodexClient) -> None:
         self._client = client
 
@@ -65,15 +71,23 @@ class RealtimeCalls:
             )
             return RealtimeCallResponse(response)
 
+        session_payload = _jsonable(session)
+        if not isinstance(session_payload, dict):
+            raise TypeError("Expected `session` to serialize to a JSON object.")
+        session_payload.pop("id", None)
+        body = {
+            "sdp": sdp,
+            "session": session_payload,
+            **(_jsonable(extra_body) if extra_body else {}),
+        }
+        query = {"intent": "quicksilver", "architecture": "avas"}
+        if extra_query:
+            query.update(extra_query)
         response = self._client._post_raw(
             "/realtime/calls",
-            body={
-                "sdp": sdp,
-                "session": _jsonable(session),
-                **(_jsonable(extra_body) if extra_body else {}),
-            },
+            body=body,
             headers={"Accept": "application/sdp", **(extra_headers or {})},
-            params=extra_query,
+            params=query,
             timeout=timeout,
         )
         return RealtimeCallResponse(response)

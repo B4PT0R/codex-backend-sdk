@@ -264,14 +264,21 @@ Realtime audio/video call initiation.
 
 **SDK method**: `client.realtime.calls.create(...)`
 
-**Status**: Supported. The SDK follows the official OpenAI SDK shape:
+**Status**: Experimental and rollout-dependent. The SDK follows the Codex
+client protocol:
 
 - plain SDP offer: `client.realtime.calls.create(sdp=offer_sdp)`
-- SDP offer plus session payload:
+- AVAS SDP offer plus session payload:
   `client.realtime.calls.create(sdp=offer_sdp, session={...})`
 
-The response is returned as binary SDP content with `.content`, `.text`,
-`.read()`, `.iter_bytes()`, and `.write_to_file(...)` helpers.
+The OAuth-authenticated ChatGPT route is not enabled for every account and may
+return `404 Not Found` until Codex supplies an experimental WebRTC call base URL.
+This is distinct from the public Realtime WebSocket route, which currently
+requires a developer API key.
+
+The response exposes `.answer_sdp` and `.call_id`, while preserving the binary
+helpers `.content`, `.text`, `.read()`, `.iter_bytes()`, and
+`.write_to_file(...)`.
 
 ---
 

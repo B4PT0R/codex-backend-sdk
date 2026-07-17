@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.7] - 2026-07-17
+
+### Added
+- Added typed Realtime call results through `RealtimeCallResponse.answer_sdp` and `RealtimeCallResponse.call_id`.
+- Added Codex AVAS session payload support, including automatic removal of the server-generated session `id` and the required `quicksilver` query parameters.
+
+### Documentation
+- Documented that the ChatGPT-authenticated Codex WebRTC route is experimental and rollout-dependent, while the public Realtime WebSocket route still requires a developer API key.
+
+### Tests
+- Added coverage for SDP response parsing, call ID validation, AVAS payload construction, and invalid session payloads.
+
 ## [0.3.6] - 2026-07-11
 
 ### Added

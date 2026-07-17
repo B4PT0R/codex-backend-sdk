@@ -6,6 +6,7 @@ class FakeResponse:
     content = b"answer-sdp"
     text = "answer-sdp"
     encoding = "utf-8"
+    headers = {"Location": "/v1/realtime/calls/calls/rtc_test"}
 
     def json(self, **kwargs):
         return {"ok": True}
@@ -43,6 +44,8 @@ def test_realtime_calls_create_posts_plain_sdp_like_official_sdk():
 
     assert isinstance(response, RealtimeCallResponse)
     assert response.read() == b"answer-sdp"
+    assert response.answer_sdp == "answer-sdp"
+    assert response.call_id == "rtc_test"
     path, kwargs = client.raw_posts[0]
     assert path == "/realtime/calls"
     assert kwargs["content"] == b"offer-sdp"
@@ -55,7 +58,7 @@ def test_realtime_calls_create_posts_session_as_backend_json():
 
     client.realtime.calls.create(
         sdp="offer-sdp",
-        session={"type": "realtime", "model": "gpt-realtime-1.5"},
+        session={"id": "session-id", "type": "realtime", "model": "gpt-realtime-1.5"},
     )
 
     path, kwargs = client.raw_posts[0]
@@ -64,7 +67,31 @@ def test_realtime_calls_create_posts_session_as_backend_json():
         "sdp": "offer-sdp",
         "session": {"type": "realtime", "model": "gpt-realtime-1.5"},
     }
+    assert kwargs["params"] == {"intent": "quicksilver", "architecture": "avas"}
     assert kwargs["headers"]["Accept"] == "application/sdp"
+
+
+def test_realtime_calls_create_rejects_non_object_session():
+    client = FakeRealtimeClient()
+
+    try:
+        client.realtime.calls.create(sdp="offer-sdp", session=["invalid"])
+    except TypeError as exc:
+        assert str(exc) == "Expected `session` to serialize to a JSON object."
+    else:
+        raise AssertionError("Expected non-object session to fail")
+
+
+def test_realtime_call_response_requires_valid_location():
+    response = FakeResponse()
+    response.headers = {"Location": "/v1/realtime/calls/not-a-call"}
+
+    try:
+        RealtimeCallResponse(response).call_id
+    except RuntimeError as exc:
+        assert "does not contain a valid call id" in str(exc)
+    else:
+        raise AssertionError("Expected invalid Location to fail")
 
 
 def test_realtime_websocket_uses_api_key_exchanged_during_oauth():

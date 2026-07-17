@@ -304,4 +304,30 @@ class BinaryResponseContent:
 
 
 class RealtimeCallResponse(BinaryResponseContent):
-    """Binary SDP response returned by ``client.realtime.calls.create``."""
+    """SDP answer and call identifier returned by Realtime call creation."""
+
+    @property
+    def answer_sdp(self) -> str:
+        return self.text
+
+    @property
+    def call_id(self) -> str:
+        location = self.response.headers.get("Location")
+        if not location:
+            raise RuntimeError("Realtime call response is missing the Location header.")
+        path = location.split("?", 1)[0].rstrip("/")
+        call_id = path.rsplit("/", 1)[-1]
+        if call_id.startswith("rtc_") or _is_uuid(call_id):
+            return call_id
+        raise RuntimeError(
+            f"Realtime call Location does not contain a valid call id: {location}"
+        )
+
+
+def _is_uuid(value: str) -> bool:
+    if len(value) != 36:
+        return False
+    return all(
+        char == "-" if index in {8, 13, 18, 23} else char in "0123456789abcdefABCDEF"
+        for index, char in enumerate(value)
+    )

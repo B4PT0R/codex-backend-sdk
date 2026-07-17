@@ -1,4 +1,12 @@
-from codex_backend_sdk import MemorySummarizeResponse, OpenAI, RawMemory
+import pytest
+
+from codex_backend_sdk import (
+    ConsumeRateLimitResetCreditResponse,
+    MemorySummarizeResponse,
+    OpenAI,
+    RateLimitResetCredits,
+    RawMemory,
+)
 
 
 class FakeCodexClient(OpenAI):
@@ -26,6 +34,22 @@ class FakeCodexClient(OpenAI):
             return [{"id": "env_1", "label": "default"}]
         raise AssertionError(f"Unexpected WHAM path: {path}")
 
+    def _get(self, path, *, params=None):
+        if path == "/rate-limit-reset-credits":
+            return {
+                "available_count": 1,
+                "total_earned_count": 2,
+                "credits": [{
+                    "id": "credit_1",
+                    "reset_type": "codex_rate_limits",
+                    "status": "available",
+                    "granted_at": "2026-07-01T00:00:00Z",
+                    "expires_at": "2026-08-01T00:00:00Z",
+                    "title": "Full reset",
+                }],
+            }
+        raise AssertionError(f"Unexpected Codex get path: {path}")
+
     def _get_chatgpt(self, path):
         self.chatgpt_gets.append(path)
         if path == "/memories":
@@ -44,6 +68,8 @@ class FakeCodexClient(OpenAI):
             return FakeJSONResponse({
                 "output": [{"trace_summary": "raw", "memory_summary": "summary"}]
             })
+        if path == "/rate-limit-reset-credits/consume":
+            return FakeJSONResponse({"code": "reset", "windows_reset": 2})
         raise AssertionError(f"Unexpected Codex post path: {path}")
 
 
@@ -62,6 +88,50 @@ def test_codex_usage_still_calls_wham_usage():
 
     assert usage["rate_limit"]["allowed"] is True
     assert client.wham_gets == [("/wham/usage", None)]
+
+
+def test_codex_rate_limit_reset_credits_list_returns_typed_details():
+    client = FakeCodexClient()
+
+    result = client.codex.rate_limit_reset_credits.list()
+
+    assert isinstance(result, RateLimitResetCredits)
+    assert result.available_count == 1
+    assert result.total_earned_count == 2
+    assert result.credits[0].id == "credit_1"
+    assert result.credits[0].title == "Full reset"
+
+
+def test_codex_rate_limit_reset_credits_consume_posts_idempotency_and_credit_ids():
+    client = FakeCodexClient()
+
+    result = client.codex.rate_limit_reset_credits.consume(
+        redeem_request_id="redeem_1",
+        credit_id="credit_1",
+    )
+
+    assert isinstance(result, ConsumeRateLimitResetCreditResponse)
+    assert result.code == "reset"
+    assert result.windows_reset == 2
+    assert client.posts == [
+        (
+            "/rate-limit-reset-credits/consume",
+            {"redeem_request_id": "redeem_1", "credit_id": "credit_1"},
+            False,
+        )
+    ]
+
+
+def test_codex_rate_limit_reset_credits_rejects_empty_identifiers():
+    client = FakeCodexClient()
+
+    with pytest.raises(ValueError, match="redeem_request_id"):
+        client.codex.rate_limit_reset_credits.consume(redeem_request_id="")
+    with pytest.raises(ValueError, match="credit_id"):
+        client.codex.rate_limit_reset_credits.consume(
+            redeem_request_id="redeem_1",
+            credit_id="",
+        )
 
 
 def test_codex_memories_list_returns_raw_chatgpt_payload():

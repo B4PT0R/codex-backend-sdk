@@ -40,6 +40,7 @@ class CodexClient:
         from .resources.models import Models
         from .resources.openai_oauth import Audio, Embeddings
         from .resources.files import Files
+        from .resources.images import Images
         from .resources.realtime import Realtime
         from .resources.responses import Responses
 
@@ -59,6 +60,7 @@ class CodexClient:
         self.realtime = Realtime(self)
         self.embeddings = Embeddings(self)
         self.audio = Audio(self)
+        self.images = Images(self)
         self.files = Files(self)
         self.codex = CodexResources(self)
 

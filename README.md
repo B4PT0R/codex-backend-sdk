@@ -164,6 +164,10 @@ resources (`responses`, `models`, `realtime`) or Codex-only resources (`codex`).
 | `wss://api.openai.com/v1/realtime?model=...` | `client.realtime_websocket_url(...)` / `client.realtime.websocket_headers(...)` | Voice v2 helpers; requires a Realtime API key obtained during OAuth or supplied by the auth store. |
 | `POST /v1/embeddings` | `client.embeddings.create(...)` | Uses the Codex OAuth access token against `api.openai.com`; usage is charged to the associated OpenAI Platform organization. |
 | `POST /backend-api/transcribe` | `client.audio.transcriptions.create(...)` | Uses the authenticated ChatGPT backend for non-streaming batch transcription; no developer API key is required. |
+| `POST /backend-api/codex/images/generations` | `client.images.generate(...)` | Generates images through the authenticated Codex backend and returns typed base64 image data. |
+| `POST /backend-api/codex/images/edits` | `client.images.edit(...)` | Edits one or more URL/data-URL images through the authenticated Codex backend. |
+| `GET /backend-api/codex/rate-limit-reset-credits` | `client.codex.rate_limit_reset_credits.list()` | Lists detailed reset credits available to the authenticated account. |
+| `POST /backend-api/codex/rate-limit-reset-credits/consume` | `client.codex.rate_limit_reset_credits.consume(...)` | Consumes a reset credit using an idempotent redemption request ID. |
 | `GET /backend-api/wham/usage` | `client.codex.usage()` | Codex/ChatGPT quota and rate-limit status. |
 | `GET /backend-api/wham/config/requirements` | `client.codex.config.requirements()` | Raw managed requirements/config payload for the authenticated account. |
 | `GET /backend-api/wham/tasks/list` | `client.codex.tasks.list(...)` | Raw Codex cloud task listing. |
@@ -369,6 +373,34 @@ with open("meeting.wav", "rb") as audio:
 print(transcription.text)
 ```
 
+### Image Generation
+
+`client.images.generate(...)` uses the ChatGPT-authenticated Codex image backend,
+not the separately billed OpenAI Platform image endpoint.
+
+```python
+image = client.images.generate(
+    prompt="A cheerful blue robot holding a red flower",
+    model="gpt-image-2",
+    quality="auto",
+    size="auto",
+)
+
+with open("robot.png", "wb") as output:
+    output.write(base64.b64decode(image.data[0].b64_json))
+```
+
+The Codex contract supports `prompt`, `model`, `background`, `n`, `quality`,
+and `size`. Editing accepts one or more ordinary URLs or data URLs:
+
+```python
+edited = client.images.edit(
+    images=["data:image/png;base64,..."],
+    prompt="Add a small red star in the center",
+    quality="low",
+)
+```
+
 ### Quota And Usage
 
 `client.codex.usage()` calls the ChatGPT WHAM usage endpoint. It returns the raw
@@ -390,6 +422,20 @@ Typical fields include:
 - `additional_rate_limits`
 - `credits`
 - `rate_limit_reached_type`
+
+Detailed reset credits are available separately:
+
+```python
+credits = client.codex.rate_limit_reset_credits.list()
+for credit in credits.credits:
+    print(credit.id, credit.title, credit.expires_at)
+
+# Consuming a credit is an account mutation. Use a unique idempotency key.
+result = client.codex.rate_limit_reset_credits.consume(
+    redeem_request_id=str(uuid.uuid4()),
+    credit_id=credits.credits[0].id,
+)
+```
 
 ### Codex Cloud Tasks
 

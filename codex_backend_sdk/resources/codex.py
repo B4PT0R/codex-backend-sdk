@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING
 
-from .._models import MemorySummarizeResponse
+from .._models import (
+    ConsumeRateLimitResetCreditResponse,
+    MemorySummarizeResponse,
+    RateLimitResetCredits,
+)
 from .._utils import _jsonable
 
 if TYPE_CHECKING:
@@ -20,10 +24,46 @@ class CodexResources:
         self.tasks = CodexTasks(client)
         self.environments = CodexEnvironments(client)
         self.config = CodexConfig(client)
+        self.rate_limit_reset_credits = CodexRateLimitResetCredits(client)
         self.user_system_messages = CodexUserSystemMessages(client)
 
     def usage(self) -> dict[str, Any]:
         return self._client._get_wham("/wham/usage")
+
+
+class CodexRateLimitResetCredits:
+    """Detailed Codex rate-limit reset credits for the authenticated account."""
+
+    def __init__(self, client: CodexClient) -> None:
+        self._client = client
+
+    def list(self) -> RateLimitResetCredits:
+        return RateLimitResetCredits.model_validate(
+            self._client._get("/rate-limit-reset-credits")
+        )
+
+    def consume(
+        self,
+        *,
+        redeem_request_id: str,
+        credit_id: str | None = None,
+    ) -> ConsumeRateLimitResetCreditResponse:
+        if not redeem_request_id:
+            raise ValueError(
+                "Expected a non-empty value for `redeem_request_id` "
+                f"but received {redeem_request_id!r}"
+            )
+        if credit_id == "":
+            raise ValueError("Expected `credit_id` to be non-empty when provided")
+        payload = {"redeem_request_id": redeem_request_id}
+        if credit_id is not None:
+            payload["credit_id"] = credit_id
+        return ConsumeRateLimitResetCreditResponse.model_validate(
+            self._client._post(
+                "/rate-limit-reset-credits/consume",
+                body=payload,
+            ).json()
+        )
 
 
 class CodexMemories:

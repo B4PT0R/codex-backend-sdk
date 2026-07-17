@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.10] - 2026-07-17
+
+### Added
+- Added typed Codex rate-limit reset credit listing and explicit idempotent consumption through `client.codex.rate_limit_reset_credits`.
+- Added ChatGPT-authenticated image generation and editing through `client.images.generate(...)` and `client.images.edit(...)`, returning typed base64 image data from the Codex backend.
+
+### Documentation
+- Documented that image generation uses the ChatGPT Codex backend rather than the separately billed Platform image endpoint, and that consuming reset credits mutates account quota state.
+- Documented the verified Codex JSON image-edit contract using ordinary URLs or base64 data URLs.
+
+### Tests
+- Added behavioral coverage for credit payloads, redemption validation, image request construction, defaults, URL normalization, and typed responses; verified read-only credit listing plus real image generation and editing against the authenticated backend.
+
 ## [0.3.9] - 2026-07-17
 
 ### Fixed

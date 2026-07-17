@@ -225,6 +225,39 @@ class Transcription(CodexBaseModel):
     text: str = ""
 
 
+class ImageData(CodexBaseModel):
+    b64_json: str
+
+
+class ImageResponse(CodexBaseModel):
+    created: int
+    data: list[ImageData] = Field(default_factory=list)
+    background: Optional[str] = None
+    quality: Optional[str] = None
+    size: Optional[str] = None
+
+
+class RateLimitResetCredit(CodexBaseModel):
+    id: str
+    reset_type: str
+    status: str
+    granted_at: str
+    expires_at: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+
+
+class RateLimitResetCredits(CodexBaseModel):
+    available_count: int = 0
+    total_earned_count: int = 0
+    credits: list[RateLimitResetCredit] = Field(default_factory=list)
+
+
+class ConsumeRateLimitResetCreditResponse(CodexBaseModel):
+    code: str
+    windows_reset: int = 0
+
+
 class RawMemoryMetadata(CodexBaseModel):
     source_path: str
 

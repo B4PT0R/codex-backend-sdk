@@ -344,6 +344,26 @@ response options used by Codex Agent. Streaming, timestamps, speaker references,
 chunking, SRT, and VTT are rejected locally rather than falling back to a
 billable Platform endpoint.
 
+### `POST /backend-api/codex/images/generations`
+
+**SDK method**: `client.images.generate(...)`
+
+**Status**: Supported through ChatGPT OAuth. Verified with `gpt-image-2`; the
+response contains `created` and `data[].b64_json`, plus optional effective
+`background`, `quality`, and `size` fields. Supported request fields mirror the
+current Codex client: `prompt`, `model`, `background`, `n`, `quality`, and
+`size`. This uses the Codex/ChatGPT backend rather than the OpenAI Platform
+image endpoint.
+
+### `POST /backend-api/codex/images/edits`
+
+**SDK method**: `client.images.edit(...)`
+
+**Status**: Supported through ChatGPT OAuth. Accepts one or more remote URLs or
+`data:` URLs as `images[].image_url`, plus the same prompt/model/background/count/
+quality/size controls as generation. Verified by generating a source image and
+editing it through the authenticated backend.
+
 ### `POST /v1/audio/speech`
 
 **Status**: Observed but not exposed. A malformed request reaches payload
@@ -388,6 +408,24 @@ Known `plan_type` values: `guest`, `free`, `go`, `plus`, `pro`, `prolite`, `free
 Known `rate_limit_reached_type.type` values: `rate_limit_reached`, `workspace_owner_credits_depleted`, `workspace_member_credits_depleted`, `workspace_owner_usage_limit_reached`, `workspace_member_usage_limit_reached`.
 
 ---
+
+### `GET /backend-api/codex/rate-limit-reset-credits`
+
+**SDK method**: `client.codex.rate_limit_reset_credits.list()`
+
+Returns a typed detail payload containing `available_count`,
+`total_earned_count`, and credit rows with IDs, reset type, status, grant and
+expiry timestamps, title, and description. The equivalent WHAM path is also
+currently accepted by ChatGPT, but the SDK follows the active Codex client
+path.
+
+### `POST /backend-api/codex/rate-limit-reset-credits/consume`
+
+**SDK method**: `client.codex.rate_limit_reset_credits.consume(...)`
+
+Consumes a reset credit. `redeem_request_id` is required as the idempotency key;
+`credit_id` selects a specific available credit when supplied. This mutates
+account quota state and is never called implicitly by the SDK.
 
 ### `GET /backend-api/wham/config/requirements`
 

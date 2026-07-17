@@ -17,7 +17,7 @@ Quickstart:
     print(response.output_text)
 """
 
-__version__ = "0.3.9"
+__version__ = "0.3.10"
 
 from .oauth import run_oauth_flow, refresh_access_token
 from .storage import load_tokens, save_tokens, TokenStore
@@ -27,6 +27,11 @@ from .codex_client import (
     CreateEmbeddingResponse,
     Embedding,
     EmbeddingUsage,
+    ImageData,
+    ImageResponse,
+    RateLimitResetCredit,
+    RateLimitResetCredits,
+    ConsumeRateLimitResetCreditResponse,
     ReasoningEffort,
     ReasoningSummary,
     ServiceTier,
@@ -60,6 +65,11 @@ __all__ = [
     "CreateEmbeddingResponse",
     "Embedding",
     "EmbeddingUsage",
+    "ImageData",
+    "ImageResponse",
+    "RateLimitResetCredit",
+    "RateLimitResetCredits",
+    "ConsumeRateLimitResetCreditResponse",
     "MemorySummarizeOutput",
     "MemorySummarizeResponse",
     "Model",

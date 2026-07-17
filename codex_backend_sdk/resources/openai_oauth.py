@@ -126,7 +126,7 @@ class AudioTranscriptions:
 
         response = self._client._post_chatgpt_raw(
             "/transcribe",
-            files={"file": _coerce_file(file)},
+            files={"file": _coerce_audio_file(file)},
             data={key: _form_value(value) for key, value in data.items()},
             headers=extra_headers,
             params=extra_query,
@@ -136,3 +136,38 @@ class AudioTranscriptions:
         if _is_given(response_format) and response_format == "text":
             return transcription.text
         return transcription
+
+
+def _coerce_audio_file(file: Any) -> Any:
+    coerced = _coerce_file(file)
+    if isinstance(coerced, tuple):
+        return coerced
+    if not hasattr(coerced, "read"):
+        return coerced
+
+    position = coerced.tell() if hasattr(coerced, "tell") else None
+    header = coerced.read(12)
+    if position is not None and hasattr(coerced, "seek"):
+        coerced.seek(position)
+
+    detected = _audio_type(header)
+    if detected is None:
+        return coerced
+    extension, mime_type = detected
+    name = getattr(coerced, "name", "audio") or "audio"
+    stem = str(name).rsplit("/", 1)[-1].rsplit(".", 1)[0] or "audio"
+    return (f"{stem}.{extension}", coerced, mime_type)
+
+
+def _audio_type(header: bytes) -> tuple[str, str] | None:
+    if header.startswith(b"RIFF") and header[8:12] == b"WAVE":
+        return "wav", "audio/wav"
+    if header.startswith(b"ID3") or header[:2] in {b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"}:
+        return "mp3", "audio/mpeg"
+    if header.startswith(b"OggS"):
+        return "ogg", "audio/ogg"
+    if header.startswith(b"fLaC"):
+        return "flac", "audio/flac"
+    if header[4:8] == b"ftyp":
+        return "m4a", "audio/mp4"
+    return None

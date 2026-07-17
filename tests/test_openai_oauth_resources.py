@@ -1,3 +1,5 @@
+from io import BytesIO
+
 import pytest
 
 from codex_backend_sdk import CreateEmbeddingResponse, OpenAI, Transcription
@@ -90,6 +92,24 @@ def test_audio_transcriptions_create_posts_to_chatgpt_backend():
     }
     assert headers["Authorization"] == "Bearer chatgpt-token"
     assert headers["ChatGPT-Account-ID"] == "account-id"
+
+
+def test_audio_transcriptions_detects_anonymous_audio_format():
+    client = FakeOpenAIClient()
+    audio = BytesIO(b"RIFF\x00\x00\x00\x00WAVEfmt ")
+    audio.name = "audio.mp3"
+
+    client.audio.transcriptions.create(
+        model="gpt-4o-mini-transcribe",
+        file=audio,
+    )
+
+    _, kwargs, _ = client.chatgpt_raw_posts[0]
+    filename, uploaded, mime_type = kwargs["files"]["file"]
+    assert filename == "audio.wav"
+    assert uploaded is audio
+    assert mime_type == "audio/wav"
+    assert audio.tell() == 0
 
 
 def test_audio_transcriptions_text_format_returns_string():

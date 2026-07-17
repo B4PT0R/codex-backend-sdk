@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.9] - 2026-07-17
+
+### Fixed
+- Detect anonymous audio buffers by their file signature before ChatGPT transcription uploads, correcting filenames and MIME types when callers provide misleading generic names such as `audio.mp3` for WAV data.
+- Restored reliable `AIClient.audio_to_text(bytes)` integration with `/backend-api/transcribe` without requiring callers to understand multipart backend constraints.
+
+### Tests
+- Added regression coverage for WAV buffers carrying an incorrect `.mp3` name and verified the complete Codex Agent transcription path against the real ChatGPT backend.
+
 ## [0.3.8] - 2026-07-17
 
 ### Changed

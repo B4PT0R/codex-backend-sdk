@@ -89,7 +89,8 @@ proves current account availability, not a public compatibility guarantee.
 | Usage, daily breakdown, credit events, thread query | `client.codex.usage` | live reads; query contract |
 | Tasks, turns, logs, archives/cancel/recover/read | `client.codex.tasks` | live reads; mutations contract |
 | Environments, machines, repository/branch discovery | `client.codex.environments`, `.repositories` | live reads; mutations contract |
-| Profile, preferences, workspace messages | `client.codex.profile`, `.config`, `.workspace_messages` | live reads; mutations contract |
+| Profile and photo | `client.codex.profile` | live read; update/photo mutations contract |
+| Preferences and workspace messages | `client.codex.config`, `.workspace_messages` | live reads |
 | Worktree snapshot upload/finalize | `client.codex.worktree_snapshots` | contract; explicit storage mutation |
 | Desktop onboarding | not exposed | inventory |
 

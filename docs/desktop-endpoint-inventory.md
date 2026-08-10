@@ -85,8 +85,8 @@ Codex account, cloud-task, environment, and Remote Control concepts.
 | POST | `/backend-api/wham/tasks/{task_id}/mark_read` | Mark a cloud task read. |
 | GET | `/backend-api/wham/onboarding/context` | Desktop onboarding state. |
 | POST | `/backend-api/wham/onboarding/desktop/complete` | Complete Desktop onboarding. |
-| GET/PATCH | `/backend-api/wham/profiles/me` | Read or update the Codex profile. |
-| POST | `/backend-api/wham/profiles/me/photo` | Multipart profile-photo upload. |
+| GET/PATCH | `/backend-api/wham/profiles/me` | Read or update the Codex profile; exposed by `client.codex.profile`. |
+| POST | `/backend-api/wham/profiles/me/photo` | Multipart profile-photo upload; exposed by `client.codex.profile`. |
 | GET/PATCH | `/backend-api/wham/settings/user` | Read or update Codex user settings. |
 | GET | `/backend-api/wham/settings/configs/user-preferences` | Managed user-preference configuration. |
 | GET | `/backend-api/wham/remote/control/mfa_requirement` | Determine Remote Control step-up requirements. |

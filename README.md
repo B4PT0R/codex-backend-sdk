@@ -183,7 +183,8 @@ official Desktop app.
 | `GET /backend-api/wham/config/bundle` | `client.codex.config.bundle()` | Selected cloud-managed Codex configuration bundle. |
 | `GET /backend-api/wham/settings/user` | `client.codex.config.user_settings()` | Authenticated Codex user settings. |
 | `GET /backend-api/wham/accounts/check` | `client.codex.accounts.check()` | Account availability and entitlement check. |
-| `GET /backend-api/wham/profiles/me` | `client.codex.profile.retrieve()` | Token-usage profile used by current Codex clients. |
+| `GET/PATCH /backend-api/wham/profiles/me` | `client.codex.profile` | Token-usage profile plus explicit display-name, username, and profile-asset mutations. |
+| `POST /backend-api/wham/profiles/me/photo` | `client.codex.profile.upload_photo(...)` / `set_photo(...)` | Multipart image upload returning the asset pointer expected by profile updates. |
 | `GET /backend-api/wham/workspace-messages` | `client.codex.workspace_messages.list()` | Workspace-scoped backend messages. |
 | `POST /backend-api/wham/tasks` | `client.codex.tasks.create(...)` | Creates a Codex cloud task from a raw evolving backend payload. |
 | `POST /backend-api/wham/worktree_snapshots/...` | `client.codex.worktree_snapshots` | Uploads a caller-prepared worktree archive through signed storage and finalizes it for cloud-task use. |
@@ -723,6 +724,10 @@ workspace_messages = client.codex.workspace_messages.list()
 
 These methods return raw backend dictionaries because these payloads can contain
 personal account-specific fields and may change without notice.
+Profile writes remain explicit: `profile.update({...})` patches confirmed
+official fields, while `upload_photo(...)` only uploads and returns an asset
+pointer. `set_photo(...)` composes upload and profile update when that behavior
+is desired.
 
 `client.codex.memories.trace_summarize(...)` exposes the Codex memory
 summarization endpoint used by the official client. It accepts dictionaries or

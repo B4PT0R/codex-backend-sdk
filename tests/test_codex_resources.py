@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from codex_backend_sdk import (
@@ -119,6 +121,13 @@ class FakeCodexClient(OpenAI):
         if path == "/rate-limit-reset-credits/consume":
             return FakeJSONResponse({"code": "reset", "windows_reset": 2})
         raise AssertionError(f"Unexpected Codex post path: {path}")
+
+    def _post_chatgpt_raw(self, path, **kwargs):
+        file_tuple = kwargs["files"]["file"]
+        self.posts.append(
+            (path, file_tuple[0], file_tuple[1].read(), file_tuple[2])
+        )
+        return FakeJSONResponse({"asset_pointer": "asset://profile-photo"})
 
 
 class FakeJSONResponse:
@@ -306,6 +315,56 @@ def test_codex_account_profile_and_workspace_messages_return_raw_payloads():
         ("/wham/profiles/me", None),
         ("/wham/workspace-messages", None),
     ]
+
+
+def test_codex_profile_update_and_photo_follow_desktop_contract(tmp_path: Path):
+    client = FakeCodexClient()
+    photo = tmp_path / "avatar.png"
+    photo.write_bytes(b"png")
+
+    assert client.codex.profile.update({"display_name": "Ada"}) == {
+        "id": "env_1",
+        "display_name": "Ada",
+    }
+    assert client.codex.profile.set_photo(photo) == {
+        "id": "env_1",
+        "profile_asset_pointer": "asset://profile-photo",
+    }
+    assert client.posts == [
+        (
+            "/wham/profiles/me/photo",
+            "avatar.png",
+            b"png",
+            "image/png",
+        )
+    ]
+    assert client.wham_patches == [
+        ("/wham/profiles/me", {"display_name": "Ada"}),
+        (
+            "/wham/profiles/me",
+            {"profile_asset_pointer": "asset://profile-photo"},
+        ),
+    ]
+
+
+def test_codex_profile_photo_validates_file_and_response(tmp_path: Path):
+    client = FakeCodexClient()
+    text = tmp_path / "avatar.txt"
+    text.write_text("not an image")
+
+    with pytest.raises(ValueError, match="image"):
+        client.codex.profile.upload_photo(text)
+    with pytest.raises(FileNotFoundError):
+        client.codex.profile.upload_photo(tmp_path / "missing.png")
+
+    photo = tmp_path / "avatar.webp"
+    photo.write_bytes(b"webp")
+    client._post_chatgpt_raw = lambda *args, **kwargs: FakeJSONResponse({})
+    with pytest.raises(RuntimeError, match="asset_pointer"):
+        client.codex.profile.upload_photo(photo)
+
+    with pytest.raises(TypeError, match="JSON object"):
+        client.codex.profile.update(["invalid"])
 
 
 def test_codex_config_exposes_bundle_and_user_settings():

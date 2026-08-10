@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import mimetypes
+from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
 from .._models import (
@@ -79,6 +81,46 @@ class CodexProfile:
 
     def retrieve(self) -> dict[str, Any]:
         return self._client._get_wham("/wham/profiles/me")
+
+    def update(self, body: Any) -> dict[str, Any]:
+        payload = _jsonable(body)
+        if not isinstance(payload, dict):
+            raise TypeError("Expected `body` to serialize to a JSON object.")
+        return self._client._patch_wham("/wham/profiles/me", body=payload)
+
+    def upload_photo(
+        self,
+        path: str | Path,
+        *,
+        content_type: str | None = None,
+    ) -> str:
+        photo = Path(path)
+        if not photo.exists():
+            raise FileNotFoundError(f"path `{photo}` does not exist")
+        if not photo.is_file():
+            raise ValueError(f"path `{photo}` is not a file")
+        mime_type = content_type or mimetypes.guess_type(photo.name)[0]
+        if mime_type is None or not mime_type.startswith("image/"):
+            raise ValueError("Expected an image profile photo.")
+        with photo.open("rb") as handle:
+            response = self._client._post_chatgpt_raw(
+                "/wham/profiles/me/photo",
+                files={"file": (photo.name, handle, mime_type)},
+            )
+        payload = response.json()
+        pointer = payload.get("asset_pointer") if isinstance(payload, dict) else None
+        if not isinstance(pointer, str) or not pointer:
+            raise RuntimeError("Profile photo upload is missing `asset_pointer`.")
+        return pointer
+
+    def set_photo(
+        self,
+        path: str | Path,
+        *,
+        content_type: str | None = None,
+    ) -> dict[str, Any]:
+        pointer = self.upload_photo(path, content_type=content_type)
+        return self.update({"profile_asset_pointer": pointer})
 
 
 class CodexRateLimitResetCredits:

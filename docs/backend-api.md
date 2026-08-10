@@ -496,11 +496,17 @@ Check account availability and Codex entitlements.
 
 ---
 
-### `GET /backend-api/wham/profiles/me`
+### `GET/PATCH /backend-api/wham/profiles/me`
 
-Fetch the authenticated token-usage profile.
+Fetch or explicitly update the authenticated token-usage profile.
 
-**SDK method**: `client.codex.profile.retrieve()`
+**SDK methods**: `client.codex.profile.retrieve()` and `.update(body)`
+
+Desktop also uploads image bytes as multipart data to
+`POST /backend-api/wham/profiles/me/photo`. The response's `asset_pointer` is
+then supplied as `profile_asset_pointer` to the profile patch. The SDK exposes
+the two operations separately through `upload_photo(...)`, and composes them in
+`set_photo(...)`. These mutations are contract-tested but not invoked live.
 
 ---
 

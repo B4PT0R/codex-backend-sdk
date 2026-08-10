@@ -52,6 +52,16 @@ contract and a five-second polling interval. The final approval/exchange remains
 contract-tested because it requires an explicit user login action. Optional
 workspace allowlisting is checked before credentials are persisted.
 
+### OAuth revocation
+
+Current Codex logout performs a best-effort `POST
+https://auth.openai.com/oauth/revoke`, preferring the refresh token and falling
+back to the access token. Refresh-token requests include the Codex `client_id`;
+access-token requests omit it. The SDK keeps local-only `client.logout()` for
+offline and testable cleanup and exposes the network mutation explicitly as
+`client.revoke()` or `revoke_oauth_token(...)`. It is contract-tested but not
+live-probed because a successful request invalidates the user's active token.
+
 ---
 
 ## Codex API endpoints

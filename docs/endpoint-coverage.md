@@ -23,6 +23,7 @@ proves current account availability, not a public compatibility guarantee.
 | `POST https://auth.openai.com/api/accounts/deviceauth/usercode` | `request_device_code`; `client.authenticate_device_code` | live; short-lived code allocation only |
 | `POST https://auth.openai.com/api/accounts/deviceauth/token` | `complete_device_code_login` | contract; browser approval required |
 | `POST https://auth.openai.com/oauth/token` (device PKCE exchange) | `complete_device_code_login` | contract; browser approval required |
+| `POST https://auth.openai.com/oauth/revoke` | `client.revoke`; `revoke_oauth_token` | contract; explicit destructive auth mutation |
 | `POST /backend-api/codex/responses` | `client.responses.create` | live |
 | `WSS /backend-api/codex/responses` | `client.responses.websocket.connect` | live; handshake metadata and completed reusable response observed |
 | `POST /backend-api/codex/responses/compact` | `client.responses.compact` | live |

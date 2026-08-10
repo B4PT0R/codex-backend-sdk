@@ -24,6 +24,7 @@ from .oauth import (
     complete_device_code_login,
     refresh_access_token,
     request_device_code,
+    revoke_oauth_token,
     run_oauth_flow,
 )
 from .storage import load_tokens, save_tokens, TokenStore
@@ -135,6 +136,7 @@ __all__ = [
     "refresh_access_token",
     "request_device_code",
     "complete_device_code_login",
+    "revoke_oauth_token",
     "load_tokens",
     "save_tokens",
     "TokenStore",

@@ -11,6 +11,7 @@ from codex_backend_sdk.oauth import (
     complete_device_code_login,
     refresh_access_token,
     request_device_code,
+    revoke_oauth_token,
 )
 
 
@@ -196,3 +197,46 @@ def test_client_device_authentication_reports_code_and_sets_store():
         allowed_workspace_ids=["account-1"],
     )
     set_store.assert_called_once_with(store)
+
+
+def test_revoke_refresh_token_uses_official_json_contract():
+    result = response({})
+    with patch("codex_backend_sdk.oauth.requests.post", return_value=result) as post:
+        assert revoke_oauth_token("refresh") is None
+    post.assert_called_once_with(
+        "https://auth.openai.com/oauth/revoke",
+        headers={"Content-Type": "application/json"},
+        json={
+            "token": "refresh",
+            "token_type_hint": "refresh_token",
+            "client_id": CLIENT_ID,
+        },
+        timeout=10,
+    )
+    result.raise_for_status.assert_called_once_with()
+
+
+def test_revoke_access_token_omits_client_id_and_validates_hint():
+    result = response({})
+    with patch("codex_backend_sdk.oauth.requests.post", return_value=result) as post:
+        revoke_oauth_token("access", token_type_hint="access_token")
+    assert "client_id" not in post.call_args.kwargs["json"]
+    with pytest.raises(ValueError, match="token_type_hint"):
+        revoke_oauth_token("token", token_type_hint="id_token")
+
+
+def test_client_revoke_prefers_refresh_token_then_clears_local_state():
+    store = Mock(
+        account_id="account-1",
+        refresh_token="refresh",
+        access_token="access",
+    )
+    client = OpenAI(store=store)
+    with (
+        patch("codex_backend_sdk.oauth.revoke_oauth_token") as revoke,
+        patch("codex_backend_sdk.storage.clear_tokens", return_value=True) as clear,
+    ):
+        assert client.revoke() is True
+    revoke.assert_called_once_with("refresh", token_type_hint="refresh_token")
+    clear.assert_called_once_with()
+    assert not client.authenticated

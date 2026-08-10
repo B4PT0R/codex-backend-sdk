@@ -201,6 +201,29 @@ def refresh_access_token(refresh_token: str) -> dict:
     return resp.json()
 
 
+def revoke_oauth_token(
+    token: str,
+    *,
+    token_type_hint: str = "refresh_token",
+    issuer: str = ISSUER,
+    client_id: str = CLIENT_ID,
+) -> None:
+    """Revoke one Codex OAuth token through the official authorization server."""
+    value = _required_text(token, "token")
+    if token_type_hint not in {"access_token", "refresh_token"}:
+        raise ValueError("Expected `token_type_hint` to be `access_token` or `refresh_token`.")
+    payload = {"token": value, "token_type_hint": token_type_hint}
+    if token_type_hint == "refresh_token":
+        payload["client_id"] = _required_text(client_id, "client_id")
+    response = requests.post(
+        f"{_auth_issuer(issuer)}/oauth/revoke",
+        headers={"Content-Type": "application/json"},
+        json=payload,
+        timeout=10,
+    )
+    response.raise_for_status()
+
+
 def request_device_code(
     *, issuer: str = ISSUER, client_id: str = CLIENT_ID
 ) -> DeviceCode:

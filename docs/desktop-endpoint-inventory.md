@@ -52,6 +52,11 @@ flow. It produces the same ordinary Codex OAuth credentials rather than a wider
 Desktop grant. The SDK exposes both the high-level flow and its start/complete
 phases; a live initiation confirmed the current response contract, while final
 approval is covered locally because it requires an interactive account action.
+Codex's complementary `/oauth/revoke` logout route is also exposed explicitly;
+it is contract-tested rather than invoked live because it invalidates the
+current credential set. Personal-access-token `whoami` remains outside this
+OAuth-focused inventory: it hydrates a separately provisioned bearer rather
+than a capability available through the user's ordinary Codex OAuth grant.
 
 A read-only live probe with an existing Codex OAuth access token returned HTTP
 200 for representative Desktop-only reads: ChatGPT models, voices, system

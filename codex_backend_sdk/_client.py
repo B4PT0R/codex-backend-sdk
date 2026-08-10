@@ -167,6 +167,20 @@ class CodexClient:
         self._session.headers.pop("ChatGPT-Account-ID", None)
         return cleared
 
+    def revoke(self) -> bool:
+        """Revoke current OAuth credentials remotely, then clear their local copy."""
+        from .oauth import revoke_oauth_token
+
+        self._ensure_auth()
+        assert self._store is not None
+        if self._store.refresh_token:
+            revoke_oauth_token(self._store.refresh_token, token_type_hint="refresh_token")
+        elif self._store.access_token:
+            revoke_oauth_token(self._store.access_token, token_type_hint="access_token")
+        else:
+            raise RuntimeError("Current OAuth credentials contain no revocable token.")
+        return self.logout()
+
     def _set_store(self, store: TokenStore) -> None:
         self._store = store
         self._session.headers.update(self._auth_headers())

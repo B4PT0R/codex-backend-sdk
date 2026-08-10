@@ -89,6 +89,19 @@ Codex account, cloud-task, environment, and Remote Control concepts.
 | GET | `/backend-api/wham/remote/control/clients` | List paired clients in the Desktop flow. |
 | POST | `/backend-api/wham/remote/control/client/pair` | Pair a Remote Control client. |
 
+Electron additionally uses the Codex-base client role to discover and manage
+remote hosts:
+
+| Method | Path | Observed role |
+| --- | --- | --- |
+| GET | `/backend-api/codex/remote/control/environments` | List environments visible to the current client. |
+| GET | `/backend-api/codex/remote/control/clients/{client_id}/environments` | List environments authorized for one Desktop/mobile client. |
+| PATCH | `/backend-api/codex/remote/control/environments/{environment_id}` | Rename a remote environment. |
+| DELETE | `/backend-api/codex/remote/control/environments/{environment_id}` | Delete an offline remote environment. |
+
+These client-role routes and the WHAM browser-client/MFA routes are exposed
+under `client.codex.remote_control.desktop`, separate from the server transport.
+
 The bundle also calls `POST /backend-api/wham/apps` as a JSON-RPC
 `tools/list`/`tools/call` transport, including site-access tools. It is exposed
 under `client.chatgpt.apps` with a raw request method and narrow validated
@@ -195,7 +208,7 @@ only at the family level.
 1. Add read-only usage detail and cloud task-turn/log helpers.
 2. Complete environment and repository discovery with explicit mutation
    methods separated from reads.
-3. Add Remote Control MFA-requirement and Desktop pairing compatibility.
-4. Probe model/voice/system-hint reads with OAuth and record response schemas.
+3. Add worktree snapshot upload and any remaining cloud-task operations.
+4. Record deeper model/voice/system-hint response schemas.
 5. Add connector directory/authentication reads before exposing explicitly
    separated external-service mutations.

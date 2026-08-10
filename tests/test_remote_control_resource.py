@@ -28,6 +28,7 @@ class FakeRemoteControlClient(OpenAI):
         self.posts = []
         self.gets = []
         self.deletes = []
+        self.patches = []
 
     def _post_wham(self, path, *, body, headers=None, use_oauth_headers=True, timeout=None):
         self.posts.append((path, body, headers, use_oauth_headers))
@@ -52,12 +53,36 @@ class FakeRemoteControlClient(OpenAI):
 
     def _get_wham(self, path, *, params=None):
         self.gets.append((path, params))
+        if path.endswith("/mfa_requirement"):
+            return {"requirement": "required"}
         return {
             "items": [{"client_id": "client-1", "display_name": "Phone"}],
             "cursor": "next-page",
         }
 
+    def _get_chatgpt(self, path, *, params=None):
+        self.gets.append((path, params))
+        return {"mfa_enabled_v2": True, "factors": []}
+
     def _delete_wham(self, path, *, timeout=None):
+        self.deletes.append(path)
+
+    def _get(self, path, *, params=None):
+        self.gets.append((path, params))
+        return {
+            "items": [{
+                "env_id": "environment-1",
+                "display_name": "Office",
+                "online": True,
+            }],
+            "cursor": None,
+        }
+
+    def _patch(self, path, *, body):
+        self.patches.append((path, body))
+        return {"env_id": "environment /1", "name": body["name"]}
+
+    def _delete(self, path):
         self.deletes.append(path)
 
 
@@ -140,6 +165,96 @@ def test_remote_control_clients_list_and_revoke_use_environment_paths():
     ]
     assert client.deletes == [
         "/wham/remote/control/environments/environment-1/clients/client-1"
+    ]
+
+
+def test_remote_control_desktop_reads_mfa_and_browser_clients():
+    client = FakeRemoteControlClient()
+
+    assert client.codex.remote_control.desktop.mfa_requirement() == "required"
+    assert client.codex.remote_control.desktop.mfa_info()["mfa_enabled_v2"] is True
+    page = client.codex.remote_control.desktop.clients.list(limit=50)
+
+    assert page.data[0].client_id == "client-1"
+    assert client.gets == [
+        ("/wham/remote/control/mfa_requirement", None),
+        ("/accounts/mfa_info", None),
+        ("/wham/remote/control/clients", {"limit": 50}),
+    ]
+
+
+def test_remote_control_desktop_pair_and_revoke_are_explicit_account_mutations():
+    client = FakeRemoteControlClient()
+
+    client.codex.remote_control.desktop.clients.pair("client-1", "ABCD-EFGH")
+    client.codex.remote_control.desktop.clients.revoke("client-1")
+
+    assert client.posts[0][0:2] == (
+        "/wham/remote/control/client/pair",
+        {"client_id": "client-1", "manual_pairing_code": "ABCD-EFGH"},
+    )
+    assert client.deletes == ["/wham/remote/control/clients/client-1"]
+
+
+class PaginatedDesktopClients(FakeRemoteControlClient):
+    def _get_wham(self, path, *, params=None):
+        self.gets.append((path, params))
+        if params.get("cursor") is None:
+            return {
+                "items": [
+                    {"client_id": "pending", "enrollment_status": "pending_enrollment"},
+                    {"client_id": "phone", "enrollment_status": "enrolled_device_key"},
+                ],
+                "cursor": "page-2",
+            }
+        return {
+            "items": [{"client_id": "browser", "enrollment_status": "enrolled_browser"}],
+            "cursor": None,
+        }
+
+
+def test_remote_control_desktop_list_all_paginates_and_can_filter_pending():
+    client = PaginatedDesktopClients()
+
+    clients = client.codex.remote_control.desktop.clients.list_all(include_pending=False)
+
+    assert [item.client_id for item in clients] == ["phone", "browser"]
+    assert client.gets[1][1] == {"limit": 100, "cursor": "page-2"}
+
+
+def test_remote_control_desktop_validates_limits_and_pairing_fields():
+    client = FakeRemoteControlClient()
+
+    with pytest.raises(ValueError, match="between 1 and 100"):
+        client.codex.remote_control.desktop.clients.list(limit=0)
+    with pytest.raises(ValueError, match="manual_pairing_code"):
+        client.codex.remote_control.desktop.clients.pair("client-1", "")
+
+
+def test_remote_control_desktop_environment_discovery_and_mutations_use_codex_route():
+    client = FakeRemoteControlClient()
+
+    page = client.codex.remote_control.desktop.environments.list(
+        client_id="client /1", limit=25
+    )
+    renamed = client.codex.remote_control.desktop.environments.rename(
+        "environment /1", "Home"
+    )
+    client.codex.remote_control.desktop.environments.delete("environment /1")
+
+    assert page.data[0].display_name == "Office"
+    assert renamed.name == "Home"
+    assert client.gets == [
+        (
+            "/remote/control/clients/client%20%2F1/environments",
+            {"limit": 25},
+        )
+    ]
+    assert client.patches == [
+        ("/remote/control/environments/environment%20%2F1", {"name": "Home"})
+    ]
+    assert client.deletes == [
+        "/remote/control/environments/environment%20%2F1"
     ]
 
 

@@ -233,6 +233,24 @@ class CodexClient:
         response.raise_for_status()
         return response
 
+    def _patch(self, path: str, *, body: dict[str, Any]) -> dict[str, Any]:
+        self._ensure_auth()
+        response = self._request_with_retries(
+            "PATCH",
+            f"{BASE_URL}{path}",
+            json=body,
+            timeout=self._timeout,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def _delete(self, path: str) -> None:
+        self._ensure_auth()
+        response = self._request_with_retries(
+            "DELETE", f"{BASE_URL}{path}", timeout=self._timeout
+        )
+        response.raise_for_status()
+
     def _openai_headers(self, extra: Optional[dict[str, str]] = None) -> dict[str, str]:
         self._ensure_auth()
         if self._store is None:

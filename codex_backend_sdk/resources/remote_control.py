@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterator, Literal, Optional, TYPE_CHECKING
+from urllib.parse import quote
 
 from pydantic import Field
 
@@ -39,17 +40,43 @@ class RemoteControlPairingStatus(CodexBaseModel):
 
 class RemoteControlClient(CodexBaseModel):
     client_id: str
+    account_user_id: Optional[str] = None
     display_name: Optional[str] = None
     device_type: Optional[str] = None
     platform: Optional[str] = None
     os_version: Optional[str] = None
     device_model: Optional[str] = None
     app_version: Optional[str] = None
+    enrollment_status: Optional[str] = None
     last_seen_at: Optional[str] = None
+    last_seen_city: Optional[str] = None
+    last_seen_country: Optional[str] = None
+    last_seen_region_code: Optional[str] = None
 
 
 class RemoteControlClientPage(CodexBaseModel):
     data: list[RemoteControlClient] = Field(default_factory=list, alias="items")
+    next_cursor: Optional[str] = Field(default=None, alias="cursor")
+
+
+class RemoteControlEnvironment(CodexBaseModel):
+    env_id: str
+    name: Optional[str] = None
+    display_name: Optional[str] = None
+    host_name: Optional[str] = None
+    kind: Optional[str] = None
+    client_type: Optional[str] = None
+    online: bool = False
+    busy: bool = False
+    os: Optional[str] = None
+    arch: Optional[str] = None
+    app_server_version: Optional[str] = None
+    installation_id: Optional[str] = None
+    last_seen_at: Optional[str] = None
+
+
+class RemoteControlEnvironmentPage(CodexBaseModel):
+    data: list[RemoteControlEnvironment] = Field(default_factory=list, alias="items")
     next_cursor: Optional[str] = Field(default=None, alias="cursor")
 
 
@@ -123,6 +150,7 @@ class RemoteControl:
         self._client = client
         self.pairing = RemoteControlPairingResource(client)
         self.clients = RemoteControlClients(client)
+        self.desktop = RemoteControlDesktop(client)
 
     def enroll(
         self,
@@ -306,7 +334,7 @@ class RemoteControlClients:
             raise ValueError("Expected `limit` between 1 and 100.")
         params = {"cursor": cursor, "limit": limit, "order": order}
         response = self._client._get_wham(
-            f"{REMOTE_CONTROL_ROOT}/environments/{environment_id}/clients",
+            f"{REMOTE_CONTROL_ROOT}/environments/{quote(environment_id, safe='')}/clients",
             params={key: value for key, value in params.items() if value is not None} or None,
         )
         return RemoteControlClientPage.model_validate(response)
@@ -314,7 +342,143 @@ class RemoteControlClients:
     def revoke(self, environment_id: str, client_id: str) -> None:
         _require_non_empty(environment_id=environment_id, client_id=client_id)
         self._client._delete_wham(
-            f"{REMOTE_CONTROL_ROOT}/environments/{environment_id}/clients/{client_id}"
+            f"{REMOTE_CONTROL_ROOT}/environments/{quote(environment_id, safe='')}/clients/{quote(client_id, safe='')}"
+        )
+
+
+class RemoteControlDesktop:
+    """Browser/mobile-client routes used by the official Desktop UI.
+
+    These use the account OAuth bearer, unlike server pairing which uses the
+    short-lived enrollment token.
+    """
+
+    def __init__(self, client: CodexClient) -> None:
+        self._client = client
+        self.clients = RemoteControlDesktopClients(client)
+        self.environments = RemoteControlDesktopEnvironments(client)
+
+    def mfa_requirement(self) -> str:
+        payload = self._client._get_wham(f"{REMOTE_CONTROL_ROOT}/mfa_requirement")
+        requirement = payload.get("requirement")
+        if not isinstance(requirement, str) or not requirement:
+            raise RuntimeError("Remote Control MFA response is missing its requirement.")
+        return requirement
+
+    def mfa_info(self) -> dict[str, Any]:
+        payload = self._client._get_chatgpt("/accounts/mfa_info")
+        if not isinstance(payload.get("mfa_enabled_v2"), bool):
+            raise RuntimeError("ChatGPT MFA response is missing `mfa_enabled_v2`.")
+        return payload
+
+
+class RemoteControlDesktopClients:
+    def __init__(self, client: CodexClient) -> None:
+        self._client = client
+
+    def list(
+        self,
+        *,
+        cursor: Optional[str] = None,
+        limit: int = 100,
+    ) -> RemoteControlClientPage:
+        if not 1 <= limit <= 100:
+            raise ValueError("Expected `limit` between 1 and 100.")
+        params = {"limit": limit, **({} if cursor is None else {"cursor": cursor})}
+        payload = self._client._get_wham(f"{REMOTE_CONTROL_ROOT}/clients", params=params)
+        return RemoteControlClientPage.model_validate(payload)
+
+    def list_all(self, *, include_pending: bool = True) -> list[RemoteControlClient]:
+        clients: list[RemoteControlClient] = []
+        cursor: Optional[str] = None
+        seen_cursors: set[str] = set()
+        while True:
+            page = self.list(cursor=cursor)
+            clients.extend(
+                client
+                for client in page.data
+                if include_pending or client.enrollment_status != "pending_enrollment"
+            )
+            cursor = page.next_cursor
+            if cursor is None:
+                return clients
+            if cursor in seen_cursors:
+                raise RuntimeError("Remote Control clients returned a repeated cursor.")
+            seen_cursors.add(cursor)
+
+    def pair(self, client_id: str, manual_pairing_code: str) -> dict[str, Any]:
+        _require_non_empty(
+            client_id=client_id, manual_pairing_code=manual_pairing_code
+        )
+        return self._client._post_wham(
+            f"{REMOTE_CONTROL_ROOT}/client/pair",
+            body={
+                "client_id": client_id,
+                "manual_pairing_code": manual_pairing_code,
+            },
+        )
+
+    def revoke(self, client_id: str) -> None:
+        _require_non_empty(client_id=client_id)
+        self._client._delete_wham(
+            f"{REMOTE_CONTROL_ROOT}/clients/{quote(client_id, safe='')}"
+        )
+
+
+class RemoteControlDesktopEnvironments:
+    """Remote hosts visible to an enrolled Desktop/mobile client."""
+
+    def __init__(self, client: CodexClient) -> None:
+        self._client = client
+
+    def list(
+        self,
+        *,
+        client_id: Optional[str] = None,
+        cursor: Optional[str] = None,
+        limit: int = 100,
+    ) -> RemoteControlEnvironmentPage:
+        if not 1 <= limit <= 100:
+            raise ValueError("Expected `limit` between 1 and 100.")
+        path = "/remote/control/environments"
+        if client_id is not None:
+            _require_non_empty(client_id=client_id)
+            path = f"/remote/control/clients/{quote(client_id, safe='')}/environments"
+        payload = self._client._get(
+            path,
+            params={
+                "limit": limit,
+                **({} if cursor is None else {"cursor": cursor}),
+            },
+        )
+        return RemoteControlEnvironmentPage.model_validate(payload)
+
+    def list_all(self, *, client_id: Optional[str] = None) -> list[RemoteControlEnvironment]:
+        environments: list[RemoteControlEnvironment] = []
+        cursor: Optional[str] = None
+        seen_cursors: set[str] = set()
+        while True:
+            page = self.list(client_id=client_id, cursor=cursor)
+            environments.extend(page.data)
+            cursor = page.next_cursor
+            if cursor is None:
+                return environments
+            if cursor in seen_cursors:
+                raise RuntimeError("Remote Control environments returned a repeated cursor.")
+            seen_cursors.add(cursor)
+
+    def rename(self, environment_id: str, name: str) -> RemoteControlEnvironment:
+        _require_non_empty(environment_id=environment_id, name=name)
+        payload = self._client._patch(
+            f"/remote/control/environments/{quote(environment_id, safe='')}",
+            body={"name": name},
+        )
+        return RemoteControlEnvironment.model_validate(payload)
+
+    def delete(self, environment_id: str) -> None:
+        _require_non_empty(environment_id=environment_id)
+        self._client._delete(
+            f"/remote/control/environments/{quote(environment_id, safe='')}"
         )
 
 

@@ -30,6 +30,13 @@ proves current account availability, not a public compatibility guarantee.
 | `POST /backend-api/wham/remote/control/server/pair[/status]` | `client.codex.remote_control.pairing` | contract |
 | `WSS /backend-api/wham/remote/control/server` | `client.codex.remote_control.connect` | contract |
 | `GET/DELETE .../remote/control/environments/{id}/clients[/client]` | `client.codex.remote_control.clients` | contract |
+| `GET /backend-api/wham/remote/control/mfa_requirement` | `client.codex.remote_control.desktop.mfa_requirement` | live |
+| `GET /backend-api/accounts/mfa_info` | `client.codex.remote_control.desktop.mfa_info` | live |
+| `GET /backend-api/wham/remote/control/clients` | `client.codex.remote_control.desktop.clients` | live |
+| `POST /backend-api/wham/remote/control/client/pair` | `client.codex.remote_control.desktop.clients.pair` | contract; explicit mutation |
+| `DELETE /backend-api/wham/remote/control/clients/{id}` | `client.codex.remote_control.desktop.clients.revoke` | contract; explicit mutation |
+| `GET /backend-api/codex/remote/control[/clients/{id}]/environments` | `client.codex.remote_control.desktop.environments` | live |
+| `PATCH/DELETE /backend-api/codex/remote/control/environments/{id}` | `client.codex.remote_control.desktop.environments.rename/delete` | contract; explicit mutation |
 
 ## Apps, MCP, and widgets
 
@@ -72,7 +79,6 @@ proves current account availability, not a public compatibility guarantee.
 | Profile, preferences, workspace messages | `client.codex.profile`, `.config`, `.workspace_messages` | live reads; mutations contract |
 | Worktree snapshot upload | not exposed | inventory |
 | Desktop onboarding | not exposed | inventory |
-| Desktop Remote Control MFA/client pairing compatibility | not exposed | inventory |
 
 ## Exclusions
 

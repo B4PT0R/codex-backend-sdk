@@ -197,6 +197,8 @@ official Desktop app.
 | `POST /backend-api/files` + signed upload | `client.files.upload(...)` | Uploads local files for Codex Apps/MCP file parameters and returns `sediment://...` metadata. |
 | `GET /backend-api/memories` | `client.codex.memories.list()` | Raw ChatGPT memory payload for the authenticated account. |
 | `GET /backend-api/user_system_messages` | `client.codex.user_system_messages.retrieve()` | Raw ChatGPT customization/system-message payload. |
+| `GET /backend-api/wham/remote/control/{mfa_requirement,clients}` | `client.codex.remote_control.desktop` | Desktop/browser-client MFA readiness and paired-client discovery. |
+| `GET /backend-api/codex/remote/control/environments` | `client.codex.remote_control.desktop.environments` | Remote host discovery, with explicit rename/delete mutations. |
 | `POST /backend-api/wham/apps` | `client.chatgpt.apps.list_tools()` / `call_tool(...)` / `request(...)` | Hosted Apps/MCP JSON-RPC transport observed in Desktop. |
 | `/backend-api/ecosystem/...` | `client.chatgpt.apps` | Widget, launcher, MCP, and URL-safety helpers; install and launch operations remain explicit mutations. |
 | `POST /backend-api/ps/mcp` | `client.chatgpt.apps.connect_hosted_mcp()` | MCP Streamable HTTP connection with initialization, sessions, JSON/SSE responses, tools, and resources. |
@@ -233,6 +235,21 @@ calling them; the SDK does not silently invoke or auto-install anything.
 `connect_hosted_mcp()` follows Codex's protocol version `2025-06-18`, sends the
 required `X-OpenAI-Product-Sku` header, accepts JSON and SSE responses, carries
 an assigned `Mcp-Session-Id`, and closes sessionful transports on context exit.
+
+Remote Control exposes its two roles separately. Server enrollment, pairing,
+WebSocket transport, and environment-scoped clients remain directly under
+`client.codex.remote_control`; account-authorized Desktop/browser clients and
+remote-host discovery live under `client.codex.remote_control.desktop`:
+
+```python
+desktop = client.codex.remote_control.desktop
+requirement = desktop.mfa_requirement()
+browser_clients = desktop.clients.list_all(include_pending=False)
+remote_hosts = desktop.environments.list_all()
+```
+
+Pairing/revoking browser clients and renaming/deleting remote hosts are explicit
+methods and are never performed by discovery calls.
 
 `client.chatgpt.conversations` exposes explicit history, search, batch, CRUD,
 branch, prepare, streaming-create/resume, and attachment-list operations.

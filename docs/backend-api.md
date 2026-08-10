@@ -580,6 +580,27 @@ The transport intentionally does not reinterpret the embedded App Server
 JSON-RPC messages. Callers must preserve the Codex `ClientEnvelope` and
 `ServerEnvelope` fields and implement their expected chunk/ACK routing.
 
+### Desktop/mobile Remote Control role
+
+The official Desktop client also acts as a Remote Control client. These
+account-authorized routes are exposed separately under
+`client.codex.remote_control.desktop`:
+
+- `GET /backend-api/wham/remote/control/mfa_requirement`
+- `GET /backend-api/accounts/mfa_info`
+- `GET /backend-api/wham/remote/control/clients`
+- `POST /backend-api/wham/remote/control/client/pair`
+- `DELETE /backend-api/wham/remote/control/clients/{client_id}`
+- `GET /backend-api/codex/remote/control/environments`
+- `GET /backend-api/codex/remote/control/clients/{client_id}/environments`
+- `PATCH/DELETE /backend-api/codex/remote/control/environments/{environment_id}`
+
+MFA state, browser-client listing, and environment listing were verified live
+with ordinary Codex OAuth. Pair, revoke, rename, and delete follow the official
+payloads but were deliberately not invoked during probing. Pagination detects
+repeated cursors rather than looping forever, and pending enrollment entries
+can be retained or filtered explicitly.
+
 ---
 
 ## Plugins and hosted Apps/MCP

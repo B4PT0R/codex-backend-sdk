@@ -61,6 +61,11 @@ proves current account availability, not a public compatibility guarantee.
 | `GET /backend-api/ps/plugins/{id}` | `client.chatgpt.plugins.retrieve` | live |
 | `POST /backend-api/ps/plugins/{id}/install` | `client.chatgpt.plugins.installation.install` | contract; explicit mutation |
 | `POST /backend-api/ps/plugins/{id}/uninstall` | `client.chatgpt.plugins.installation.uninstall` | contract; explicit mutation |
+| `GET /backend-api/ps/plugins/workspace/created` | `client.chatgpt.plugins.shares.created/created_all` | live; empty page observed |
+| `POST /backend-api/public/plugins/workspace/upload-url` | `client.chatgpt.plugins.shares.create_upload` | contract; explicit storage allocation |
+| `POST /backend-api/public/plugins/workspace[/{id}]` | `client.chatgpt.plugins.shares.finish_upload/publish_*` | contract; explicit publication mutation |
+| `PUT /backend-api/ps/plugins/{id}/shares` | `client.chatgpt.plugins.shares.update_targets` | contract; explicit access mutation |
+| `DELETE /backend-api/public/plugins/workspace/{id}` | `client.chatgpt.plugins.shares.delete` | contract; explicit deletion |
 | `POST /backend-api/ps/mcp` | `client.chatgpt.apps.connect_hosted_mcp` | live; MCP 2025-06-18, 172 tools, 37 resources |
 | `GET /backend-api/connectors/directory/list[_workspace]` | `client.chatgpt.connectors.directory` | live; 2,614 apps observed |
 | `POST /backend-api/ps/apps/batch` | `client.chatgpt.connectors.batch_metadata` | live |

@@ -11,8 +11,11 @@ if TYPE_CHECKING:
 
 class ChatGPTPlugins:
     def __init__(self, client: CodexClient) -> None:
+        from .chatgpt_plugin_shares import ChatGPTPluginShares
+
         self._client = client
         self.installation = ChatGPTPluginInstallation(client)
+        self.shares = ChatGPTPluginShares(client)
 
     def featured(self, *, platform: Literal["codex", "chat"] = "codex") -> list[str]:
         payload = self._client._get_chatgpt(

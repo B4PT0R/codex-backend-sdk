@@ -189,8 +189,10 @@ MCP Streamable HTTP `/ps/mcp` lifecycle.
 The newer Codex checkout also uses `/ps/plugins/list`, `search`, `installed`,
 `suggested`, workspace sharing, detail, and explicit install/uninstall routes.
 Their read surfaces are live-probed and exposed under `client.chatgpt.plugins`;
-installation mutations are contract-tested only. Workspace plugin publication
-and share-management routes remain a separate mutation-heavy follow-up lot.
+installation mutations are contract-tested only. Workspace plugin publication,
+signed archive upload, created-share discovery, access-target management, and
+deletion are exposed under `.plugins.shares`; only created-share discovery was
+probed live.
 
 ## Apps, connectors, and files
 

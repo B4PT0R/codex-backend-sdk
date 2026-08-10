@@ -675,6 +675,22 @@ shared page for the test account. `plugins.installation.install/uninstall`
 follows the official mutations and verifies the returned plugin ID and enabled
 state, but neither mutation was invoked live.
 
+`client.chatgpt.plugins.shares` covers the current workspace publication
+protocol. `publish_directory(...)` validates a plugin manifest, rejects links
+and special filesystem entries, builds the same rootless gzip tar archive as
+Codex, enforces the 50 MiB compressed limit, obtains a signed upload URL, and
+uploads with Azure's `x-ms-blob-type: BlockBlob` header without forwarding the
+OAuth session. `publish_archive(...)` accepts an already prepared archive.
+Finalization supports create or update plus `LISTED`, `UNLISTED`, and `PRIVATE`
+policies; unlisted shares automatically retain the authenticated workspace as a
+reader, matching Codex.
+
+Created-share discovery was live-probed successfully (empty on the test
+account). Publication, target updates, and deletion are explicit mutations and
+were contract-tested without touching the live workspace. `update_targets()`
+accepts only the official user/group/workspace principals and reader/editor
+roles; `delete()` requires the official HTTP 204 response.
+
 ---
 
 ## Connector discovery, linking, and external authority

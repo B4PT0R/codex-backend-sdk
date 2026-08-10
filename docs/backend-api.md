@@ -696,6 +696,20 @@ were contract-tested without touching the live workspace. `update_targets()`
 accepts only the official user/group/workspace principals and reader/editor
 roles; `delete()` requires the official HTTP 204 response.
 
+`client.chatgpt.plugins.bundles` completes the remote materialization flow.
+Plugin detail is requested with `includeDownloadUrls=true`, then the
+backend-issued bundle is downloaded without ChatGPT authorization headers.
+Initial and redirected URLs must use HTTPS; declared and streamed sizes are
+bounded to 100 MiB. Downloads can return bytes, `BytesIO`, or a persisted file.
+
+`extract_plugin(...)` stages extraction beside the destination, rejects
+absolute/traversing paths, links, and special tar entries, caps total extracted
+data at 512 MiB, validates the standard JSON manifest and its plugin name, then
+renames the staging directory atomically. A live 80,440-byte bundle was
+downloaded and extracted successfully. Skill bundles use the same transport
+when `skill_bundle_download_url` is present; the probed skill exposed Markdown
+but no auxiliary bundle URL, so that variant remains contract-tested.
+
 ---
 
 ## Connector discovery, linking, and external authority

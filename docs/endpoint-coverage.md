@@ -60,6 +60,8 @@ proves current account availability, not a public compatibility guarantee.
 | `GET /backend-api/ps/plugins/workspace/shared` | `client.chatgpt.plugins.workspace_shared` | live; empty workspace page observed |
 | `GET /backend-api/ps/plugins/{id}` | `client.chatgpt.plugins.retrieve` | live |
 | `GET /backend-api/ps/plugins/{id}/skills/{name}` | `client.chatgpt.plugins.skill` | live |
+| Backend-issued plugin bundle HTTPS URL | `client.chatgpt.plugins.bundles.download_plugin/extract_plugin` | live; 80,440-byte bundle downloaded and extracted |
+| Backend-issued skill bundle HTTPS URL | `client.chatgpt.plugins.bundles.download_skill` | contract; probed skill had no auxiliary URL |
 | `POST /backend-api/ps/plugins/{id}/install` | `client.chatgpt.plugins.installation.install` | contract; explicit mutation |
 | `POST /backend-api/ps/plugins/{id}/uninstall` | `client.chatgpt.plugins.installation.uninstall` | contract; explicit mutation |
 | `GET /backend-api/ps/plugins/workspace/created` | `client.chatgpt.plugins.shares.created/created_all` | live; empty page observed |

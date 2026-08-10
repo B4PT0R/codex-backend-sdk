@@ -201,6 +201,11 @@ excluded: they manage durable signing keys and authenticated task assertions,
 which are security/attestation infrastructure rather than a generic OAuth
 backend convenience surface.
 
+Remote plugin detail can include signed plugin and skill bundle URLs. The SDK
+now mirrors Codex's bounded unauthenticated download and safe extraction
+invariants under `.plugins.bundles`; a current global bundle was live-downloaded
+and extracted successfully.
+
 ## Apps, connectors, and files
 
 Verified route families include:

@@ -272,6 +272,12 @@ external service, so callers must inspect action safety metadata and own user
 confirmation before invoking them. Discovery never authenticates a connector
 or executes an action implicitly.
 
+`external_actions.upload_google_drive_file(...)` reproduces Desktop's native
+multipart conversion flow for `.docx`, `.pptx`, and `.xlsx` files. It requires
+an already linked Google Drive connector and raises
+`ConnectorAuthenticationRequiredError` when the backend reports that linking
+is required; it never starts OAuth on the caller's behalf.
+
 Remote Control exposes its two roles separately. Server enrollment, pairing,
 WebSocket transport, and environment-scoped clients remain directly under
 `client.codex.remote_control`; account-authorized Desktop/browser clients and

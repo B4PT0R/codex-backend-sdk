@@ -676,6 +676,14 @@ Codex and Desktop clients without conflating catalog reads with authority:
   undoing email may modify an external service, so an independent harness must
   apply its own confirmation policy.
 
+The same external-action namespace exposes
+`upload_google_drive_file(path, title=...)`. It sends Desktop's exact multipart
+shape (`arguments` JSON plus an Office document) to
+`/wham/apps/google_drive/upload`, accepts `.docx`, `.pptx`, and `.xlsx`, and
+surfaces connector-auth failures as `ConnectorAuthenticationRequiredError`.
+The method converts/creates a file in the linked Google Drive account and is
+therefore an explicit external mutation, not a generic file upload.
+
 The ordinary Codex OAuth grant already includes `api.connectors.read` and
 `api.connectors.invoke`; Desktop does not obtain a broader reusable bearer
 grant. Read-only live probes returned 2,614 directory apps, valid batch/detail/

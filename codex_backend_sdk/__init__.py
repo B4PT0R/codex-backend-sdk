@@ -33,6 +33,7 @@ from .resources.remote_control import (
     RemoteControlPairingStatus,
 )
 from .resources.chatgpt_apps import ChatGPTAppsProtocolError, HostedMCPConnection
+from .resources.chatgpt_connectors import ConnectorAuthenticationRequiredError
 from .codex_client import (
     CodexBackendUnsupportedParameterError,
     CodexBaseModel,
@@ -77,6 +78,7 @@ __all__ = [
     "CodexBaseModel",
     "ChatGPTSpeech",
     "ChatGPTAppsProtocolError",
+    "ConnectorAuthenticationRequiredError",
     "HostedMCPConnection",
     "CreateEmbeddingResponse",
     "Embedding",

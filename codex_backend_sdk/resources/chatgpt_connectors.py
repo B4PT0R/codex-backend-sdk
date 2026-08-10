@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any, Literal, TYPE_CHECKING
 from urllib.parse import quote
 
@@ -9,6 +11,10 @@ from .._utils import _jsonable
 
 if TYPE_CHECKING:
     from .._client import CodexClient
+
+
+class ConnectorAuthenticationRequiredError(RuntimeError):
+    """Raised when an explicit connector action requires a linked account."""
 
 
 def _required(value: str, name: str) -> str:
@@ -267,3 +273,61 @@ class ConnectorExternalActions:
         return self._client._post_chatgpt(
             "/aip/connectors/email/send_email_status", body=_object(body)
         )
+
+    def upload_google_drive_file(
+        self,
+        path: str | Path,
+        *,
+        title: str | None = None,
+    ) -> dict[str, Any]:
+        """Convert an Office document through the linked Google Drive app."""
+
+        file_path = Path(path)
+        if not file_path.exists():
+            raise FileNotFoundError(f"path `{file_path}` does not exist")
+        if not file_path.is_file():
+            raise ValueError(f"path `{file_path}` is not a file")
+        mime_type = {
+            ".docx": (
+                "application/vnd.openxmlformats-officedocument."
+                "wordprocessingml.document"
+            ),
+            ".pptx": (
+                "application/vnd.openxmlformats-officedocument."
+                "presentationml.presentation"
+            ),
+            ".xlsx": (
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
+        }.get(file_path.suffix.lower())
+        if mime_type is None:
+            raise ValueError("Expected a .docx, .pptx, or .xlsx file.")
+        resolved_title = file_path.name if title is None else _required(title, "title")
+
+        with file_path.open("rb") as handle:
+            response = self._client._post_chatgpt_raw(
+                "/wham/apps/google_drive/upload",
+                data={"arguments": json.dumps({"title": resolved_title})},
+                files={"file": (file_path.name, handle, mime_type)},
+            )
+        payload = response.json()
+        if not isinstance(payload, dict) or not isinstance(
+            payload.get("connector_result"), dict
+        ):
+            raise RuntimeError("Google Drive upload returned an invalid connector result.")
+        result = payload["connector_result"]
+        metadata = result.get("_meta")
+        apps_metadata = metadata.get("_codex_apps") if isinstance(metadata, dict) else None
+        auth_failure = (
+            apps_metadata.get("connector_auth_failure")
+            if isinstance(apps_metadata, dict)
+            else None
+        )
+        if isinstance(auth_failure, dict) and auth_failure.get("is_auth_failure") is True:
+            raise ConnectorAuthenticationRequiredError(
+                "Google Drive connector authentication is required."
+            )
+        if result.get("isError") is True:
+            raise RuntimeError("Google Drive connector could not open the file.")
+        return payload

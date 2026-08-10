@@ -198,7 +198,7 @@ Verified route families include:
 - `/backend-api/projects/...` for project metadata, files, saves, and connector
   scopes;
 - `/backend-api/wham/apps/google_drive/upload` for native Google Workspace file
-  conversion/upload.
+  conversion/upload, exposed as an explicit connector external action.
 
 These routes are now exposed under `client.chatgpt.connectors`. Read-only
 discovery and link inspection are separate from `authentication` mutations and

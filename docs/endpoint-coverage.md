@@ -80,6 +80,7 @@ proves current account availability, not a public compatibility guarantee.
 | Accessible connector links | `client.chatgpt.connectors.links.list_accessible` | live; 9 links observed |
 | Connector no-auth/OAuth linking and reauthentication | `client.chatgpt.connectors.authentication` | contract; explicit mutations |
 | Contacts and email actions | `client.chatgpt.connectors.external_actions` | contract; caller-owned external-action approval |
+| `POST /backend-api/wham/apps/google_drive/upload` | `client.chatgpt.connectors.external_actions.upload_google_drive_file` | contract; explicit external file mutation |
 
 ## Codex cloud resources
 

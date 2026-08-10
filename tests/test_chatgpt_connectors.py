@@ -1,6 +1,8 @@
+from pathlib import Path
+
 import pytest
 
-from codex_backend_sdk import OpenAI
+from codex_backend_sdk import ConnectorAuthenticationRequiredError, OpenAI
 
 
 class FakeResponse:
@@ -39,6 +41,20 @@ class FakeConnectorClient(OpenAI):
     def _request_chatgpt(self, method, path, **kwargs):
         self.calls.append((method, path, kwargs))
         return FakeResponse({"apps": [{"id": "connector-1", "tools": []}]})
+
+    def _post_chatgpt_raw(self, path, **kwargs):
+        file_tuple = kwargs["files"]["file"]
+        self.calls.append(
+            (
+                "MULTIPART",
+                path,
+                kwargs["data"],
+                (file_tuple[0], file_tuple[1].read(), file_tuple[2]),
+            )
+        )
+        return FakeResponse(
+            {"connector_result": {"content": [], "structuredContent": {}}}
+        )
 
 
 def test_connector_directory_paginates_official_next_token_shape():
@@ -200,3 +216,61 @@ def test_connector_boundaries_reject_invalid_pages_payloads_and_ids():
     with pytest.raises(TypeError, match="JSON object"):
         client.chatgpt.connectors.external_actions.send_email(["invalid"])
     assert client.chatgpt.connectors.batch_metadata([]) == {"apps": []}
+
+
+def test_google_drive_upload_uses_official_multipart_contract(tmp_path: Path):
+    client = FakeConnectorClient()
+    document = tmp_path / "report.docx"
+    document.write_bytes(b"office-document")
+
+    payload = client.chatgpt.connectors.external_actions.upload_google_drive_file(
+        document, title="Quarterly report"
+    )
+
+    assert payload == {
+        "connector_result": {"content": [], "structuredContent": {}}
+    }
+    assert client.calls == [
+        (
+            "MULTIPART",
+            "/wham/apps/google_drive/upload",
+            {"arguments": '{"title": "Quarterly report"}'},
+            (
+                "report.docx",
+                b"office-document",
+                (
+                    "application/vnd.openxmlformats-officedocument."
+                    "wordprocessingml.document"
+                ),
+            ),
+        )
+    ]
+
+
+def test_google_drive_upload_detects_connector_auth_failure(tmp_path: Path):
+    client = FakeConnectorClient()
+    document = tmp_path / "report.xlsx"
+    document.write_bytes(b"sheet")
+    client._post_chatgpt_raw = lambda *args, **kwargs: FakeResponse(
+        {
+            "connector_result": {
+                "_meta": {
+                    "_codex_apps": {
+                        "connector_auth_failure": {"is_auth_failure": True}
+                    }
+                }
+            }
+        }
+    )
+
+    with pytest.raises(ConnectorAuthenticationRequiredError):
+        client.chatgpt.connectors.external_actions.upload_google_drive_file(document)
+
+
+def test_google_drive_upload_rejects_unsupported_files(tmp_path: Path):
+    client = FakeConnectorClient()
+    unsupported = tmp_path / "report.pdf"
+    unsupported.write_bytes(b"pdf")
+
+    with pytest.raises(ValueError, match="docx"):
+        client.chatgpt.connectors.external_actions.upload_google_drive_file(unsupported)

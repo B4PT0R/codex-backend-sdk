@@ -29,6 +29,7 @@ from .resources.remote_control import (
     RemoteControlPairing,
     RemoteControlPairingStatus,
 )
+from .resources.chatgpt_apps import ChatGPTAppsProtocolError
 from .codex_client import (
     CodexBackendUnsupportedParameterError,
     CodexBaseModel,
@@ -72,6 +73,7 @@ __all__ = [
     "CodexBackendUnsupportedParameterError",
     "CodexBaseModel",
     "ChatGPTSpeech",
+    "ChatGPTAppsProtocolError",
     "CreateEmbeddingResponse",
     "Embedding",
     "EmbeddingUsage",

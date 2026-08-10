@@ -1,0 +1,83 @@
+# Endpoint coverage matrix
+
+This is the living implementation matrix for backend surfaces found in the
+official Codex and Codex Desktop clients. The source snapshot and discovery
+method are recorded in `desktop-endpoint-inventory.md`.
+
+Statuses:
+
+- **live**: exercised against the backend with Codex OAuth;
+- **contract**: implemented from an official-client request contract and
+  covered by local tests, but not invoked live because it mutates state or
+  requires user-owned identifiers;
+- **inventory**: observed but not yet implemented;
+- **excluded**: intentionally outside the SDK's default surface.
+
+Private schemas remain raw unless a stable boundary is useful. A live status
+proves current account availability, not a public compatibility guarantee.
+
+## Core Codex and protocol transports
+
+| Method and path | SDK surface | Status |
+| --- | --- | --- |
+| `POST /backend-api/codex/responses` | `client.responses.create` | live |
+| `POST /backend-api/codex/responses/compact` | `client.responses.compact` | live |
+| `GET /backend-api/codex/models` | `client.models` | live |
+| `POST /backend-api/codex/realtime/calls` | `client.realtime.calls` | live |
+| `WSS /v1/realtime?model=...` | `client.realtime.connect` | live |
+| `POST /backend-api/wham/remote/control/server/enroll` | `client.codex.remote_control.enroll` | contract |
+| `POST /backend-api/wham/remote/control/server/refresh` | `client.codex.remote_control.refresh` | contract |
+| `POST /backend-api/wham/remote/control/server/pair[/status]` | `client.codex.remote_control.pairing` | contract |
+| `WSS /backend-api/wham/remote/control/server` | `client.codex.remote_control.connect` | contract |
+| `GET/DELETE .../remote/control/environments/{id}/clients[/client]` | `client.codex.remote_control.clients` | contract |
+
+## Apps, MCP, and widgets
+
+| Method and path | SDK surface | Status |
+| --- | --- | --- |
+| `POST /backend-api/wham/apps` (`tools/list`) | `client.chatgpt.apps.list_tools` | live; 170 tools observed |
+| `POST /backend-api/wham/apps` (raw JSON-RPC) | `client.chatgpt.apps.request` | contract |
+| `POST /backend-api/wham/apps` (`tools/call`) | `client.chatgpt.apps.call_tool` | contract |
+| `POST /backend-api/ecosystem/url_safe` | `client.chatgpt.apps.is_url_safe` | live |
+| `POST /backend-api/ecosystem/launcher/bootstrap` | `client.chatgpt.apps.bootstrap_launcher` | contract |
+| `POST /backend-api/ecosystem/launcher/auto_install` | `client.chatgpt.apps.auto_install_launcher` | contract; explicit mutation |
+| `POST /backend-api/ecosystem/call_mcp` | `client.chatgpt.apps.call_ecosystem_mcp` | contract |
+| `GET /backend-api/ecosystem/widget` | `client.chatgpt.apps.get_widget` | contract |
+| `POST /backend-api/ecosystem/launch_widget` | `client.chatgpt.apps.launch_widget` | contract; explicit mutation |
+| `GET /backend-api/plugins/export/curated` | not exposed | inventory |
+| `GET /backend-api/plugins/featured` | not exposed | inventory |
+| `POST /backend-api/ps/mcp` | not exposed | inventory |
+
+## ChatGPT product resources
+
+| Family | SDK surface | Status |
+| --- | --- | --- |
+| Models, voices, system hints, account | `client.chatgpt.models`, `.voice`, `.account` | live reads |
+| Conversation list/search/CRUD/streaming | `client.chatgpt.conversations` | live reads; mutations contract |
+| Projects and project files | `client.chatgpt.projects` | live reads; mutations contract |
+| File library and uploads | `client.chatgpt.files`, `client.files` | contract |
+| Pins and shared links | `client.chatgpt.pins`, `.shares` | live reads; mutations contract |
+| Pronunciation synthesis | `client.chatgpt.voice.synthesize_pronunciation` | live |
+| Sentinel session routes | `client.chatgpt.sentinel` | contract |
+| GPTs, global search, writing blocks | not exposed | inventory |
+| Connector metadata/linking/actions | not exposed | inventory |
+
+## Codex cloud resources
+
+| Family | SDK surface | Status |
+| --- | --- | --- |
+| Usage, daily breakdown, credit events, thread query | `client.codex.usage` | live reads; query contract |
+| Tasks, turns, logs, archives/cancel/recover/read | `client.codex.tasks` | live reads; mutations contract |
+| Environments, machines, repository/branch discovery | `client.codex.environments`, `.repositories` | live reads; mutations contract |
+| Profile, preferences, workspace messages | `client.codex.profile`, `.config`, `.workspace_messages` | live reads; mutations contract |
+| Worktree snapshot upload | not exposed | inventory |
+| Desktop onboarding | not exposed | inventory |
+| Desktop Remote Control MFA/client pairing compatibility | not exposed | inventory |
+
+## Exclusions
+
+Payments and subscriptions, workspace administration, reports, attestation,
+feature bootstrap, telemetry, analytics, and beacon endpoints are excluded by
+default. They are commercially sensitive, security-sensitive, administrative,
+or observability surfaces rather than useful primitives for independent
+harnesses.

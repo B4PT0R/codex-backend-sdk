@@ -197,6 +197,8 @@ official Desktop app.
 | `POST /backend-api/files` + signed upload | `client.files.upload(...)` | Uploads local files for Codex Apps/MCP file parameters and returns `sediment://...` metadata. |
 | `GET /backend-api/memories` | `client.codex.memories.list()` | Raw ChatGPT memory payload for the authenticated account. |
 | `GET /backend-api/user_system_messages` | `client.codex.user_system_messages.retrieve()` | Raw ChatGPT customization/system-message payload. |
+| `POST /backend-api/wham/apps` | `client.chatgpt.apps.list_tools()` / `call_tool(...)` / `request(...)` | Hosted Apps/MCP JSON-RPC transport observed in Desktop. |
+| `/backend-api/ecosystem/...` | `client.chatgpt.apps` | Widget, launcher, MCP, and URL-safety helpers; install and launch operations remain explicit mutations. |
 
 Desktop-observed ChatGPT surfaces are deliberately separate from the Codex
 protocol:
@@ -209,7 +211,15 @@ conversation = client.chatgpt.conversations.retrieve("conv_...")
 # ChatGPT product model and voice metadata
 chatgpt_models = client.chatgpt.models.list()
 voices = client.chatgpt.voice.voices()
+
+# Hosted ChatGPT Apps/MCP discovery and invocation
+tools = client.chatgpt.apps.list_tools()
+result = client.chatgpt.apps.call_tool("connector_tool_name", {"query": "..."})
 ```
+
+Hosted tools can mutate connected external services. Independent harnesses
+must inspect tool annotations and own their user-confirmation policy before
+calling them; the SDK does not silently invoke or auto-install anything.
 
 `client.chatgpt.conversations` exposes explicit history, search, batch, CRUD,
 branch, prepare, streaming-create/resume, and attachment-list operations.
@@ -219,7 +229,9 @@ Desktop content and its explicit mutations. `client.chatgpt.account`, `.models`,
 Responses remain raw dictionaries (or raw streaming HTTP responses) because
 these undocumented schemas can evolve. See
 [`docs/desktop-endpoint-inventory.md`](docs/desktop-endpoint-inventory.md) for
-the audited source snapshot and endpoints intentionally left inventory-only.
+the audited source snapshot and
+[`docs/endpoint-coverage.md`](docs/endpoint-coverage.md) for the implementation
+and live-probe status of each family.
 
 ### Responses
 

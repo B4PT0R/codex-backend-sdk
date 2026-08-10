@@ -8,6 +8,7 @@ from typing import Any, Literal, TYPE_CHECKING
 
 from .._models import ChatGPTSpeech
 from .._utils import _jsonable
+from .chatgpt_apps import ChatGPTApps
 
 if TYPE_CHECKING:
     from .._client import CodexClient
@@ -36,6 +37,7 @@ class ChatGPTResources:
 
     def __init__(self, client: CodexClient) -> None:
         self.account = ChatGPTAccount(client)
+        self.apps = ChatGPTApps(client)
         self.conversations = ChatGPTConversations(client)
         self.files = ChatGPTFiles(client)
         self.models = ChatGPTModels(client)

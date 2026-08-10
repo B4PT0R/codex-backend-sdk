@@ -90,9 +90,9 @@ Codex account, cloud-task, environment, and Remote Control concepts.
 | POST | `/backend-api/wham/remote/control/client/pair` | Pair a Remote Control client. |
 
 The bundle also calls `POST /backend-api/wham/apps` as a JSON-RPC
-`tools/list`/`tools/call` transport, including site-access tools. This is a
-protocol surface rather than a conventional REST resource and should remain a
-raw transport if exposed.
+`tools/list`/`tools/call` transport, including site-access tools. It is exposed
+under `client.chatgpt.apps` with a raw request method and narrow validated
+convenience methods. A live OAuth probe returned 170 advertised tools.
 
 ## General ChatGPT conversation surface
 
@@ -119,8 +119,8 @@ not present in `codex-rs`. Its main conversation transport is streaming:
 
 The same client includes pins, projects, shared links, GPTs (`/gizmos/...`),
 global search, file-library operations, and writing-block/widget endpoints.
-Those are real ChatGPT product APIs, but they are farther from this SDK's Codex
-scope and are intentionally inventory-only.
+Pins, projects, shared links, and file-library operations are now exposed under
+`client.chatgpt`; GPTs, global search, and writing blocks remain inventory-only.
 
 ## General ChatGPT model, voice, and session routes
 
@@ -192,5 +192,5 @@ only at the family level.
    methods separated from reads.
 3. Add Remote Control MFA-requirement and Desktop pairing compatibility.
 4. Probe model/voice/system-hint reads with OAuth and record response schemas.
-5. Treat the ChatGPT conversation streaming protocol as a separate resource
-   only after capture-based contract tests exist.
+5. Add curated plugin discovery and the distinct `/ps/mcp` transport after
+   validating their lifecycle and response contracts.

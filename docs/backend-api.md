@@ -592,9 +592,17 @@ surfaces:
 - `GET /backend-api/plugins/featured` — legacy remote plugin discovery.
 - `POST /backend-api/ps/mcp` — hosted Apps/MCP JSON-RPC transport.
 
-They are intentionally inventory-only for now. The first two feed Codex's
-plugin cache and the last is an MCP transport rather than a stable REST
-resource; exposing thin JSON helpers would hide important protocol ownership.
+`POST /backend-api/wham/apps`, the transport used by current Desktop Apps, is
+exposed under `client.chatgpt.apps`. `list_tools()` and `call_tool()` validate
+the stable JSON-RPC envelope while preserving tool schemas and results; the
+lower-level `request()` remains available so the SDK does not pretend that the
+evolving MCP payload is a stable REST schema. A live OAuth probe returned 170
+tools. The same resource exposes the observed `/ecosystem` launcher, widget,
+MCP, and URL-safety calls, with installation and launch kept as explicitly
+named mutations.
+
+The curated/featured plugin feeds and `/ps/mcp` remain inventory-only pending
+their own response-contract and lifecycle validation.
 
 ---
 

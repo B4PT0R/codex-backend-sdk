@@ -199,6 +199,12 @@ transport for structured Web Search commands. It is exposed under
 `client.codex.web_search`; a harmless `time` command was probed live with
 ordinary Codex OAuth and returned text plus encrypted continuation state.
 
+Its alternate Responses WebSocket transport on
+`wss://chatgpt.com/backend-api/codex/responses` is exposed under
+`client.responses.websocket`. Both the authenticated upgrade and a complete
+11-event `response.create` turn were probed live; the connection remained
+reusable after `response.completed`.
+
 Current Codex also reads `/ps/plugins/{id}/skills/{name}`; the SDK exposes and
 live-probes this detail route with identifier validation. Its Agent Identity
 JWKS and `auth.openai.com/api/accounts/v1/agent/...` registration routes remain

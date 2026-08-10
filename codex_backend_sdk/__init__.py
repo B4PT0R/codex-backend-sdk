@@ -34,6 +34,10 @@ from .resources.remote_control import (
 )
 from .resources.chatgpt_apps import ChatGPTAppsProtocolError, HostedMCPConnection
 from .resources.chatgpt_connectors import ConnectorAuthenticationRequiredError
+from .resources.responses_websocket import (
+    ResponsesWebSocketConnection,
+    ResponsesWebSocketError,
+)
 from .codex_client import (
     CodexBackendUnsupportedParameterError,
     CodexBaseModel,
@@ -98,6 +102,8 @@ __all__ = [
     "ResponseFormatJsonSchema",
     "ResponseStreamEvent",
     "ResponseUsage",
+    "ResponsesWebSocketConnection",
+    "ResponsesWebSocketError",
     "RealtimeCallResponse",
     "RemoteControlClient",
     "RemoteControlClientPage",

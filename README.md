@@ -167,6 +167,7 @@ official Desktop app.
 | Backend endpoint | SDK method | Notes |
 |---|---|---|
 | `POST /backend-api/codex/responses` | `client.responses.create(...)` | Stream-only backend; non-streaming SDK calls are collected from SSE events. |
+| `WSS /backend-api/codex/responses` | `client.responses.websocket.connect()` | Reusable sequential `response.create` transport with raw forward-compatible events, handshake metadata and structured error envelopes. |
 | `POST /backend-api/codex/responses/compact` | `client.responses.compact(...)` | Codex-specific helper for encrypted context compaction. |
 | `POST /backend-api/codex/memories/trace_summarize` | `client.codex.memories.trace_summarize(...)` | Raw Codex memory trace summarization helper. |
 | `GET /backend-api/codex/models` | `client.models.list()` / `client.models.retrieve(...)` | OpenAI-shaped model objects with Codex metadata preserved as extra fields. |

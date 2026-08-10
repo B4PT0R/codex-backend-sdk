@@ -21,6 +21,7 @@ proves current account availability, not a public compatibility guarantee.
 | Method and path | SDK surface | Status |
 | --- | --- | --- |
 | `POST /backend-api/codex/responses` | `client.responses.create` | live |
+| `WSS /backend-api/codex/responses` | `client.responses.websocket.connect` | live; handshake metadata and completed reusable response observed |
 | `POST /backend-api/codex/responses/compact` | `client.responses.compact` | live |
 | `GET /backend-api/codex/models` | `client.models` | live |
 | `POST /backend-api/codex/realtime/calls` | `client.realtime.calls` | live |

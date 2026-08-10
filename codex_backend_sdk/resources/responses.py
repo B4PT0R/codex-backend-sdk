@@ -26,7 +26,10 @@ if TYPE_CHECKING:
 
 class Responses:
     def __init__(self, client: CodexClient) -> None:
+        from .responses_websocket import ResponsesWebSocket
+
         self._client = client
+        self.websocket = ResponsesWebSocket(client)
 
     def create(
         self,

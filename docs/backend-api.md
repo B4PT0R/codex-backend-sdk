@@ -190,6 +190,28 @@ Reasoning content is NOT delivered as streaming deltas. It arrives as a complete
 }
 ```
 
+### WebSocket `/codex/responses`
+
+**SDK method**: `client.responses.websocket.connect()`; then
+`connection.create(request)` or `connection.events(request)`.
+
+Current Codex can upgrade the same Responses path to WebSocket and send JSON
+`response.create` frames. Unlike the higher-level HTTP helper, this SDK surface
+is deliberately low-level: it preserves every event object and supports
+`previous_response_id`, `generate: false` warmups, and `client_metadata`
+without pretending the evolving WebSocket envelope is part of the public
+Responses API.
+
+Connections are reusable sequentially and reject overlapping response streams.
+The handshake exposes `x-reasoning-included`, `x-models-etag`, `openai-model`,
+and `x-codex-turn-state` when supplied. Error frames raise
+`ResponsesWebSocketError` with the backend code, HTTP-like status and original
+event; premature close, binary data and malformed JSON close the connection.
+
+A live OAuth handshake returned a model ETag. A minimal live
+`response.create` produced 11 events through `response.completed`, including
+rate-limit and timing events, and left the connection reusable.
+
 ---
 
 ### `POST /codex/responses/compact`

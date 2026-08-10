@@ -9,6 +9,7 @@ from typing import Any, Literal, TYPE_CHECKING
 from .._models import ChatGPTSpeech
 from .._utils import _jsonable
 from .chatgpt_apps import ChatGPTApps
+from .chatgpt_plugins import ChatGPTPlugins
 
 if TYPE_CHECKING:
     from .._client import CodexClient
@@ -42,6 +43,7 @@ class ChatGPTResources:
         self.files = ChatGPTFiles(client)
         self.models = ChatGPTModels(client)
         self.pins = ChatGPTPins(client)
+        self.plugins = ChatGPTPlugins(client)
         self.projects = ChatGPTProjects(client)
         self.shares = ChatGPTShares(client)
         self.voice = ChatGPTVoice(client)

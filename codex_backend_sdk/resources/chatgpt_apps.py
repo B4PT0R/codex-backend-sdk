@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, TYPE_CHECKING, Union
 
 from .._utils import _jsonable
@@ -28,6 +29,178 @@ def _object(value: Any, name: str) -> dict[str, Any]:
 
 class ChatGPTAppsProtocolError(RuntimeError):
     """A valid HTTP response contained an invalid or failed Apps JSON-RPC envelope."""
+
+
+def _response_messages(response: Any) -> list[dict[str, Any]]:
+    content_type = response.headers.get("content-type", "").lower()
+    if "text/event-stream" not in content_type:
+        if not response.content:
+            return []
+        payload = response.json()
+        values = payload if isinstance(payload, list) else [payload]
+    else:
+        values = []
+        data_lines: list[str] = []
+        for line in response.text.splitlines():
+            if not line:
+                if data_lines:
+                    data = "\n".join(data_lines)
+                    if data != "[DONE]":
+                        values.append(json.loads(data))
+                    data_lines = []
+            elif line.startswith("data:"):
+                data_lines.append(line[5:].lstrip())
+        if data_lines:
+            values.append(json.loads("\n".join(data_lines)))
+    if not all(isinstance(value, dict) for value in values):
+        raise ChatGPTAppsProtocolError("Hosted MCP returned a non-object message.")
+    return values
+
+
+class HostedMCPConnection:
+    """Synchronous MCP Streamable HTTP connection to ChatGPT plugin-service."""
+
+    def __init__(
+        self,
+        client: CodexClient,
+        *,
+        product_sku: str = "codex",
+        originator: str | None = None,
+    ) -> None:
+        self._client = client
+        self._product_sku = _required(product_sku, "product_sku")
+        self._originator = originator
+        self._session_id: str | None = None
+        self._next_request_id = 1
+        self.initialize_result: dict[str, Any] | None = None
+
+    @property
+    def session_id(self) -> str | None:
+        return self._session_id
+
+    def _headers(self) -> dict[str, str]:
+        headers = {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+            "X-OpenAI-Product-Sku": self._product_sku,
+        }
+        if self._originator is not None:
+            headers["originator"] = _required(self._originator, "originator")
+        if self._session_id is not None:
+            headers["Mcp-Session-Id"] = self._session_id
+        return headers
+
+    def _send(self, body: dict[str, Any]) -> list[dict[str, Any]]:
+        response = self._client._request_chatgpt(
+            "POST", "/ps/mcp", body=body, headers=self._headers()
+        )
+        session_id = response.headers.get("mcp-session-id")
+        if session_id:
+            self._session_id = session_id
+        return _response_messages(response)
+
+    def request(
+        self,
+        method: str,
+        params: Any | None = None,
+        *,
+        request_id: JsonRpcId | None = None,
+    ) -> dict[str, Any]:
+        if request_id is None:
+            request_id = self._next_request_id
+            self._next_request_id += 1
+        body = {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": _required(method, "method"),
+            "params": _object({} if params is None else params, "params"),
+        }
+        messages = self._send(body)
+        response = next((message for message in messages if message.get("id") == request_id), None)
+        if response is None:
+            raise ChatGPTAppsProtocolError("Hosted MCP response is missing the request id.")
+        error = response.get("error")
+        if error is not None:
+            message = error.get("message") if isinstance(error, dict) else None
+            raise ChatGPTAppsProtocolError(message or "Hosted MCP request failed.")
+        if not isinstance(response.get("result"), dict):
+            raise ChatGPTAppsProtocolError("Hosted MCP response is missing an object result.")
+        return response["result"]
+
+    def notify(self, method: str, params: Any | None = None) -> None:
+        self._send({
+            "jsonrpc": "2.0",
+            "method": _required(method, "method"),
+            **({} if params is None else {"params": _object(params, "params")}),
+        })
+
+    def initialize(
+        self,
+        *,
+        protocol_version: str = "2025-06-18",
+        client_name: str = "codex-backend-sdk",
+        client_version: str | None = None,
+        capabilities: Any | None = None,
+    ) -> dict[str, Any]:
+        if client_version is None:
+            from .. import __version__
+
+            client_version = __version__
+        result = self.request("initialize", {
+            "protocolVersion": _required(protocol_version, "protocol_version"),
+            "capabilities": _object({} if capabilities is None else capabilities, "capabilities"),
+            "clientInfo": {
+                "name": _required(client_name, "client_name"),
+                "version": _required(client_version, "client_version"),
+            },
+        })
+        self.notify("notifications/initialized")
+        self.initialize_result = result
+        return result
+
+    def list_tools(self, *, cursor: str | None = None) -> dict[str, Any]:
+        return self.request("tools/list", {} if cursor is None else {"cursor": cursor})
+
+    def call_tool(
+        self,
+        name: str,
+        arguments: Any | None = None,
+        *,
+        meta: Any | None = None,
+    ) -> dict[str, Any]:
+        """Invoke a hosted tool; callers own confirmation for external mutations."""
+        params = {
+            "name": _required(name, "name"),
+            "arguments": _object({} if arguments is None else arguments, "arguments"),
+        }
+        if meta is not None:
+            params["_meta"] = _object(meta, "meta")
+        return self.request("tools/call", params)
+
+    def list_resources(self, *, cursor: str | None = None) -> dict[str, Any]:
+        return self.request("resources/list", {} if cursor is None else {"cursor": cursor})
+
+    def list_resource_templates(self, *, cursor: str | None = None) -> dict[str, Any]:
+        return self.request(
+            "resources/templates/list", {} if cursor is None else {"cursor": cursor}
+        )
+
+    def read_resource(self, uri: str) -> dict[str, Any]:
+        return self.request("resources/read", {"uri": _required(uri, "uri")})
+
+    def close(self) -> None:
+        if self._session_id is None:
+            return
+        self._client._request_chatgpt("DELETE", "/ps/mcp", headers=self._headers())
+        self._session_id = None
+
+    def __enter__(self) -> HostedMCPConnection:
+        if self.initialize_result is None:
+            self.initialize()
+        return self
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
+        self.close()
 
 
 class ChatGPTApps:
@@ -126,3 +299,17 @@ class ChatGPTApps:
             body={"resolved_pineapple_uri": None, "url": _required(url, "url")},
         )
         return response.get("safe") is True
+
+    def connect_hosted_mcp(
+        self,
+        *,
+        product_sku: str = "codex",
+        originator: str | None = None,
+        initialize: bool = True,
+    ) -> HostedMCPConnection:
+        connection = HostedMCPConnection(
+            self._client, product_sku=product_sku, originator=originator
+        )
+        if initialize:
+            connection.initialize()
+        return connection

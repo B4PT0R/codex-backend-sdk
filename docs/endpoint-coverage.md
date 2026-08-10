@@ -44,9 +44,9 @@ proves current account availability, not a public compatibility guarantee.
 | `POST /backend-api/ecosystem/call_mcp` | `client.chatgpt.apps.call_ecosystem_mcp` | contract |
 | `GET /backend-api/ecosystem/widget` | `client.chatgpt.apps.get_widget` | contract |
 | `POST /backend-api/ecosystem/launch_widget` | `client.chatgpt.apps.launch_widget` | contract; explicit mutation |
-| `GET /backend-api/plugins/export/curated` | not exposed | inventory |
-| `GET /backend-api/plugins/featured` | not exposed | inventory |
-| `POST /backend-api/ps/mcp` | not exposed | inventory |
+| `GET /backend-api/plugins/export/curated` | `client.chatgpt.plugins.curated_export` | live |
+| `GET /backend-api/plugins/featured` | `client.chatgpt.plugins.featured` | live; 29 Codex IDs observed |
+| `POST /backend-api/ps/mcp` | `client.chatgpt.apps.connect_hosted_mcp` | live; MCP 2025-06-18, 172 tools, 37 resources |
 
 ## ChatGPT product resources
 

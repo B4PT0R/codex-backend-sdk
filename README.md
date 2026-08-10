@@ -199,6 +199,8 @@ official Desktop app.
 | `GET /backend-api/user_system_messages` | `client.codex.user_system_messages.retrieve()` | Raw ChatGPT customization/system-message payload. |
 | `POST /backend-api/wham/apps` | `client.chatgpt.apps.list_tools()` / `call_tool(...)` / `request(...)` | Hosted Apps/MCP JSON-RPC transport observed in Desktop. |
 | `/backend-api/ecosystem/...` | `client.chatgpt.apps` | Widget, launcher, MCP, and URL-safety helpers; install and launch operations remain explicit mutations. |
+| `POST /backend-api/ps/mcp` | `client.chatgpt.apps.connect_hosted_mcp()` | MCP Streamable HTTP connection with initialization, sessions, JSON/SSE responses, tools, and resources. |
+| `GET /backend-api/plugins/...` | `client.chatgpt.plugins` | Featured plugin IDs and curated export metadata used by Codex. |
 
 Desktop-observed ChatGPT surfaces are deliberately separate from the Codex
 protocol:
@@ -215,11 +217,22 @@ voices = client.chatgpt.voice.voices()
 # Hosted ChatGPT Apps/MCP discovery and invocation
 tools = client.chatgpt.apps.list_tools()
 result = client.chatgpt.apps.call_tool("connector_tool_name", {"query": "..."})
+
+# Full MCP Streamable HTTP protocol, including resources and session cleanup
+with client.chatgpt.apps.connect_hosted_mcp() as mcp:
+    hosted_tools = mcp.list_tools()["tools"]
+    resources = mcp.list_resources()["resources"]
+
+featured = client.chatgpt.plugins.featured(platform="codex")
+curated_export = client.chatgpt.plugins.curated_export()
 ```
 
 Hosted tools can mutate connected external services. Independent harnesses
 must inspect tool annotations and own their user-confirmation policy before
 calling them; the SDK does not silently invoke or auto-install anything.
+`connect_hosted_mcp()` follows Codex's protocol version `2025-06-18`, sends the
+required `X-OpenAI-Product-Sku` header, accepts JSON and SSE responses, carries
+an assigned `Mcp-Session-Id`, and closes sessionful transports on context exit.
 
 `client.chatgpt.conversations` exposes explicit history, search, batch, CRUD,
 branch, prepare, streaming-create/resume, and attachment-list operations.

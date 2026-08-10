@@ -601,8 +601,21 @@ tools. The same resource exposes the observed `/ecosystem` launcher, widget,
 MCP, and URL-safety calls, with installation and launch kept as explicitly
 named mutations.
 
-The curated/featured plugin feeds and `/ps/mcp` remain inventory-only pending
-their own response-contract and lifecycle validation.
+The distinct `/ps/mcp` endpoint is exposed by
+`client.chatgpt.apps.connect_hosted_mcp()`. It implements the MCP Streamable
+HTTP lifecycle used by current `codex-rs`: protocol version `2025-06-18`, the
+`X-OpenAI-Product-Sku: codex` header, `initialize` followed by
+`notifications/initialized`, JSON or SSE responses, optional
+`Mcp-Session-Id`, and session deletion on close. It provides raw requests plus
+tools and resource convenience methods. A live OAuth probe returned 172 tools,
+37 resources, no resource templates, and no session ID for the current
+stateless deployment.
+
+The read-only feeds are exposed through `client.chatgpt.plugins`: `featured()`
+returned 29 plugin IDs for the `codex` platform in a live probe, and
+`curated_export()` returned the backend-supplied signed archive URL. The SDK
+returns export metadata rather than downloading or installing the archive
+implicitly.
 
 ---
 

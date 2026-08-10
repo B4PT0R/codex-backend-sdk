@@ -151,6 +151,11 @@ stabilize these private schemas. Existing `client.codex.memories` and
 `client.codex.user_system_messages` access remains as a compatibility alias;
 their clearer ownership is now also available through `client.chatgpt.account`.
 
+The hosted plugin feeds and both observed Apps transports are now exposed:
+`client.chatgpt.plugins` covers featured IDs and curated export metadata;
+`client.chatgpt.apps` covers Desktop's `/wham/apps` envelope and Codex's full
+MCP Streamable HTTP `/ps/mcp` lifecycle.
+
 ## Apps, connectors, and files
 
 Verified route families include:
@@ -192,5 +197,5 @@ only at the family level.
    methods separated from reads.
 3. Add Remote Control MFA-requirement and Desktop pairing compatibility.
 4. Probe model/voice/system-hint reads with OAuth and record response schemas.
-5. Add curated plugin discovery and the distinct `/ps/mcp` transport after
-   validating their lifecycle and response contracts.
+5. Add connector directory/authentication reads before exposing explicitly
+   separated external-service mutations.

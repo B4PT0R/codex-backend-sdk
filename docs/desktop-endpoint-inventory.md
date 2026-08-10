@@ -194,6 +194,11 @@ signed archive upload, created-share discovery, access-target management, and
 deletion are exposed under `.plugins.shares`; only created-share discovery was
 probed live.
 
+Current Codex also has a dedicated `POST /backend-api/codex/alpha/search`
+transport for structured Web Search commands. It is exposed under
+`client.codex.web_search`; a harmless `time` command was probed live with
+ordinary Codex OAuth and returned text plus encrypted continuation state.
+
 Current Codex also reads `/ps/plugins/{id}/skills/{name}`; the SDK exposes and
 live-probes this detail route with identifier validation. Its Agent Identity
 JWKS and `auth.openai.com/api/accounts/v1/agent/...` registration routes remain

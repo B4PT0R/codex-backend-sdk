@@ -171,6 +171,7 @@ official Desktop app.
 | `POST /backend-api/codex/memories/trace_summarize` | `client.codex.memories.trace_summarize(...)` | Raw Codex memory trace summarization helper. |
 | `GET /backend-api/codex/models` | `client.models.list()` / `client.models.retrieve(...)` | OpenAI-shaped model objects with Codex metadata preserved as extra fields. |
 | `POST /backend-api/codex/realtime/calls` | `client.realtime.calls.create(...)` / `create_v3(...)` | OAuth-authenticated SDP call creation. Realtime v3 accepts the confirmed Codex snapshots `gpt-live-1-codex` and `gpt-live-1-boulder-alpha`. |
+| `POST /backend-api/codex/alpha/search` | `client.codex.web_search.search(...)` | Structured Web Search commands used by Codex, including search, page operations, images, finance, weather, sports and time. |
 | `wss://api.openai.com/v1/realtime?model=...` | `client.realtime_websocket_url(...)` / `client.realtime.websocket_headers(...)` | Voice v2 helpers; requires a Realtime API key obtained during OAuth or supplied by the auth store. |
 | `POST /v1/embeddings` | `client.embeddings.create(...)` | Uses the Codex OAuth access token against `api.openai.com`; usage is charged to the associated OpenAI Platform organization. |
 | `POST /backend-api/transcribe` | `client.audio.transcriptions.create(...)` | Uses the authenticated ChatGPT backend for non-streaming batch transcription; no developer API key is required. |

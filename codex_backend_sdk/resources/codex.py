@@ -21,11 +21,13 @@ class CodexResources:
     """Codex-only endpoints that do not exist on the official OpenAI API."""
 
     def __init__(self, client: CodexClient) -> None:
+        from .codex_web_search import CodexWebSearch
         from .remote_control import RemoteControl
         from .worktree_snapshots import CodexWorktreeSnapshots
 
         self._client = client
         self.accounts = CodexAccounts(client)
+        self.web_search = CodexWebSearch(client)
         self.usage_details = CodexUsageDetails(client)
         self.profile = CodexProfile(client)
         self.memories = CodexMemories(client)

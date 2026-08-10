@@ -25,6 +25,7 @@ proves current account availability, not a public compatibility guarantee.
 | `GET /backend-api/codex/models` | `client.models` | live |
 | `POST /backend-api/codex/realtime/calls` | `client.realtime.calls` | live |
 | `WSS /v1/realtime?model=...` | `client.realtime.connect` | live |
+| `POST /backend-api/codex/alpha/search` | `client.codex.web_search.search` | live; time command and encrypted continuation state observed |
 | `POST /backend-api/wham/remote/control/server/enroll` | `client.codex.remote_control.enroll` | contract |
 | `POST /backend-api/wham/remote/control/server/refresh` | `client.codex.remote_control.refresh` | contract |
 | `POST /backend-api/wham/remote/control/server/pair[/status]` | `client.codex.remote_control.pairing` | contract |

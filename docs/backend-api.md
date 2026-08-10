@@ -292,6 +292,22 @@ The response exposes `.answer_sdp` and `.call_id`, while preserving the binary
 helpers `.content`, `.text`, `.read()`, `.iter_bytes()`, and
 `.write_to_file(...)`.
 
+### `POST /codex/alpha/search`
+
+**SDK method**: `client.codex.web_search.search(...)`
+
+This is the structured Web Search transport used by current Codex when the
+dedicated search-request feature is enabled. It accepts a stable request
+envelope (`id`, `model`, optional input/reasoning/settings/token budget) and the
+full command object currently defined by Codex: text and image queries, open,
+click, find, PDF screenshots, finance, weather, sports, time, and response
+length. Optional `originator` and `x-codex-turn-metadata` headers are preserved.
+
+The SDK validates the request envelope and the stable response fields while
+leaving individual structured result objects and additive top-level fields raw
+for forward compatibility. A live OAuth probe using the harmless `time`
+command returned text plus encrypted continuation state successfully.
+
 ---
 
 ### Realtime WebSocket helpers

@@ -51,7 +51,7 @@ proves current account availability, not a public compatibility guarantee.
 | `POST /backend-api/ecosystem/call_mcp` | `client.chatgpt.apps.call_ecosystem_mcp` | contract |
 | `GET /backend-api/ecosystem/widget` | `client.chatgpt.apps.get_widget` | contract |
 | `POST /backend-api/ecosystem/launch_widget` | `client.chatgpt.apps.launch_widget` | contract; explicit mutation |
-| `GET /backend-api/plugins/export/curated` | `client.chatgpt.plugins.curated_export` | live |
+| `GET /backend-api/plugins/export/curated` and signed archive | `client.chatgpt.plugins.curated_export`, `.bundles.download_curated/extract_curated` | live; 17,933,003-byte export extracted safely |
 | `GET /backend-api/plugins/featured` | `client.chatgpt.plugins.featured` | live; 29 Codex IDs observed |
 | `GET /backend-api/ps/plugins/list` | `client.chatgpt.plugins.list/list_all` | live; 184 global plugins observed |
 | `GET /backend-api/ps/plugins/search` | `client.chatgpt.plugins.search` | live |

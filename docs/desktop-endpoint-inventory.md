@@ -204,7 +204,10 @@ backend convenience surface.
 Remote plugin detail can include signed plugin and skill bundle URLs. The SDK
 now mirrors Codex's bounded unauthenticated download and safe extraction
 invariants under `.plugins.bundles`; a current global bundle was live-downloaded
-and extracted successfully.
+and extracted successfully. The same resource now materializes the older
+curated-export ZIP with Codex's top-level-wrapper semantics, stricter entry and
+size validation, and atomic activation; the current 17,933,003-byte export was
+live-downloaded and extracted successfully.
 
 ## Apps, connectors, and files
 

@@ -6,10 +6,12 @@ from io import BytesIO
 import json
 from pathlib import Path
 import shutil
+import stat
 import tarfile
 import tempfile
 from typing import Any, Literal, TYPE_CHECKING
 from urllib.parse import urlparse
+import zipfile
 
 import requests
 
@@ -40,6 +42,22 @@ class ChatGPTPluginBundles:
         url = release.get("bundle_download_url") if isinstance(release, dict) else None
         return self._download(
             url,
+            response_format=response_format,
+            output_path=output_path,
+            max_bytes=max_bytes,
+        )
+
+    def download_curated(
+        self,
+        *,
+        response_format: Literal["bytes", "bytes_io", "file"] = "bytes",
+        output_path: str | Path | None = None,
+        max_bytes: int = PLUGIN_BUNDLE_MAX_DOWNLOAD_BYTES,
+    ) -> bytes | BytesIO | Path:
+        """Download the signed curated-plugin backup archive without OAuth headers."""
+        export = self._plugins.curated_export()
+        return self._download(
+            export.get("download_url"),
             response_format=response_format,
             output_path=output_path,
             max_bytes=max_bytes,
@@ -81,6 +99,24 @@ class ChatGPTPluginBundles:
             content,
             Path(destination),
             expected_name=expected_name,
+            max_extracted_bytes=max_extracted_bytes,
+        )
+
+    def extract_curated(
+        self,
+        destination: str | Path,
+        *,
+        max_download_bytes: int = PLUGIN_BUNDLE_MAX_DOWNLOAD_BYTES,
+        max_extracted_bytes: int = PLUGIN_BUNDLE_MAX_EXTRACTED_BYTES,
+    ) -> Path:
+        """Materialize the curated export atomically after validating its layout."""
+        export = self._plugins.curated_export()
+        content = self._download_bytes(
+            export.get("download_url"), max_bytes=max_download_bytes
+        )
+        return _extract_curated_archive(
+            content,
+            Path(destination),
             max_extracted_bytes=max_extracted_bytes,
         )
 
@@ -209,6 +245,75 @@ def _extract_bundle(
     except Exception:
         shutil.rmtree(staging, ignore_errors=True)
         raise
+
+
+def _extract_curated_archive(
+    content: bytes,
+    destination: Path,
+    *,
+    max_extracted_bytes: int,
+) -> Path:
+    if destination.exists():
+        raise ValueError(f"Curated extraction destination already exists: `{destination}`")
+    if max_extracted_bytes < 1:
+        raise ValueError("Expected `max_extracted_bytes` to be positive.")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix="curated-plugins-", dir=destination.parent))
+    try:
+        total = 0
+        with zipfile.ZipFile(BytesIO(content)) as archive:
+            for entry in archive.infolist():
+                relative = _curated_relative_path(entry.filename)
+                if relative is None:
+                    continue
+                mode = entry.external_attr >> 16
+                kind = stat.S_IFMT(mode)
+                if kind not in {0, stat.S_IFREG, stat.S_IFDIR}:
+                    raise ValueError(
+                        f"Curated plugin archive entry `{entry.filename}` has unsupported type."
+                    )
+                target = _safe_output_path(staging, relative.as_posix())
+                if entry.is_dir() or kind == stat.S_IFDIR:
+                    target.mkdir(parents=True, exist_ok=True)
+                    continue
+                total += entry.file_size
+                if total > max_extracted_bytes:
+                    raise ValueError(
+                        f"Curated plugin archive exceeds {max_extracted_bytes} extracted bytes."
+                    )
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(entry) as source, target.open("wb") as output:
+                    shutil.copyfileobj(source, output)
+
+        manifest = staging / ".agents/plugins/marketplace.json"
+        if not manifest.is_file():
+            raise ValueError("Curated plugin archive has no marketplace manifest.")
+        try:
+            payload = json.loads(manifest.read_text())
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("Curated plugin marketplace manifest is invalid JSON.") from exc
+        if not isinstance(payload, dict):
+            raise ValueError("Curated plugin marketplace manifest is not a JSON object.")
+        staging.rename(destination)
+        return destination
+    except Exception:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+
+
+def _curated_relative_path(name: str) -> Path | None:
+    path = Path(name)
+    if path.is_absolute() or "\\" in name:
+        raise ValueError(f"Curated plugin archive entry `{name}` has an unsafe path.")
+    parts = path.parts
+    if not parts or any(part in {"", ".", ".."} for part in parts):
+        raise ValueError(f"Curated plugin archive entry `{name}` has an unsafe path.")
+    # Both the GitHub zipball and the backend backup wrap the checkout in one
+    # generated top-level directory. Codex deliberately strips that component.
+    relative_parts = parts[1:]
+    if not relative_parts:
+        return None
+    return Path(*relative_parts)
 
 
 def _safe_output_path(root: Path, name: str) -> Path:

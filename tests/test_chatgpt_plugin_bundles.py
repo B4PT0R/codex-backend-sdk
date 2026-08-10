@@ -1,6 +1,8 @@
 from io import BytesIO
 from pathlib import Path
+import stat
 import tarfile
+import zipfile
 
 import pytest
 
@@ -16,6 +18,15 @@ def bundle_bytes(*, name="demo", extra=None):
         archive.addfile(info, BytesIO(manifest))
         if extra is not None:
             archive.addfile(*extra)
+    return buffer.getvalue()
+
+
+def curated_bytes(*, manifest='{"plugins": []}', extra=None):
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, mode="w") as archive:
+        archive.writestr("openai-plugins/.agents/plugins/marketplace.json", manifest)
+        if extra is not None:
+            archive.writestr(*extra)
     return buffer.getvalue()
 
 
@@ -58,6 +69,9 @@ def configure_plugin_details(client):
         "name": skill_name,
         "skill_bundle_download_url": "https://cdn.example.test/skill",
     }
+    client.chatgpt.plugins.curated_export = lambda: {
+        "download_url": "https://cdn.example.test/curated.zip"
+    }
 
 
 def test_plugin_bundle_download_formats_do_not_forward_oauth(tmp_path: Path, monkeypatch):
@@ -79,6 +93,7 @@ def test_plugin_bundle_download_formats_do_not_forward_oauth(tmp_path: Path, mon
     bundles = client.chatgpt.plugins.bundles
 
     assert bundles.download_plugin("plugins~demo") == content
+    assert bundles.download_curated() == content
     assert bundles.download_skill(
         "plugins~demo", "skill", response_format="bytes_io"
     ).read() == content
@@ -89,6 +104,51 @@ def test_plugin_bundle_download_formats_do_not_forward_oauth(tmp_path: Path, mon
     assert output.read_bytes() == content
     assert all("headers" not in kwargs for _, kwargs in requests_seen)
     assert all(response.closed for response in responses)
+
+
+def test_curated_archive_extracts_atomically_and_strips_wrapper(
+    tmp_path: Path, monkeypatch
+):
+    content = curated_bytes()
+    client = FakeBundleClient(content)
+    configure_plugin_details(client)
+    monkeypatch.setattr(
+        "codex_backend_sdk.resources.chatgpt_plugin_bundles.requests.get",
+        lambda *args, **kwargs: FakeDownloadResponse(content),
+    )
+    destination = tmp_path / "curated"
+
+    result = client.chatgpt.plugins.bundles.extract_curated(destination)
+
+    assert result == destination
+    assert (destination / ".agents/plugins/marketplace.json").is_file()
+    assert not (destination / "openai-plugins").exists()
+    assert not list(tmp_path.glob("curated-plugins-*"))
+
+
+def test_curated_archive_rejects_unsafe_entries_and_invalid_manifest(
+    tmp_path: Path, monkeypatch
+):
+    client = FakeBundleClient(b"")
+    configure_plugin_details(client)
+    symlink = zipfile.ZipInfo("openai-plugins/link")
+    symlink.create_system = 3
+    symlink.external_attr = (stat.S_IFLNK | 0o777) << 16
+    cases = [
+        (curated_bytes(extra=("openai-plugins/../escape", b"x")), "unsafe path"),
+        (curated_bytes(extra=(symlink, b"target")), "unsupported type"),
+        (curated_bytes(manifest="[]"), "not a JSON object"),
+    ]
+
+    for index, (content, message) in enumerate(cases):
+        monkeypatch.setattr(
+            "codex_backend_sdk.resources.chatgpt_plugin_bundles.requests.get",
+            lambda *args, content=content, **kwargs: FakeDownloadResponse(content),
+        )
+        with pytest.raises(ValueError, match=message):
+            client.chatgpt.plugins.bundles.extract_curated(
+                tmp_path / f"curated-{index}"
+            )
 
 
 def test_plugin_bundle_extracts_atomically_and_validates_manifest(
@@ -162,6 +222,16 @@ def test_plugin_bundle_enforces_download_and_extracted_limits(tmp_path: Path, mo
     with pytest.raises(ValueError, match="extracted bytes"):
         client.chatgpt.plugins.bundles.extract_plugin(
             "plugins~demo", tmp_path / "checkout", max_extracted_bytes=1
+        )
+
+    curated = curated_bytes()
+    monkeypatch.setattr(
+        "codex_backend_sdk.resources.chatgpt_plugin_bundles.requests.get",
+        lambda *args, **kwargs: FakeDownloadResponse(curated),
+    )
+    with pytest.raises(ValueError, match="extracted bytes"):
+        client.chatgpt.plugins.bundles.extract_curated(
+            tmp_path / "curated", max_extracted_bytes=1
         )
 
 

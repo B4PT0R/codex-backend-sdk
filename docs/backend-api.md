@@ -658,9 +658,13 @@ stateless deployment.
 
 The legacy read-only feeds remain exposed through `client.chatgpt.plugins`:
 `featured()` returned 29 plugin IDs for the `codex` platform in a live probe,
-and `curated_export()` returned the backend-supplied signed archive URL. The SDK
-returns export metadata rather than downloading or installing the archive
-implicitly.
+and `curated_export()` returned the backend-supplied signed archive URL.
+`plugins.bundles.download_curated()` downloads that URL without forwarding the
+OAuth bearer; `extract_curated()` strips the generated archive wrapper, rejects
+unsafe entries, enforces compressed and expanded limits, validates
+`.agents/plugins/marketplace.json`, and activates a new destination atomically.
+The current 17,933,003-byte export was downloaded and extracted successfully in
+a read-only live probe. Nothing is installed implicitly.
 
 Current `codex-rs` additionally uses the `/ps/plugins` service. The same SDK
 resource now exposes paginated `list`, `search`, `installed`,

@@ -213,7 +213,7 @@ official Desktop app.
 | `GET /backend-api/ps/plugins/{list,search,installed,suggested,...}` | `client.chatgpt.plugins` | Current Codex remote-plugin catalogs, detail, search, installed state, suggestions, and workspace sharing discovery. |
 | `POST /backend-api/ps/plugins/{id}/{install,uninstall}` | `client.chatgpt.plugins.installation` | Explicit remote-plugin installation mutations with response-state validation. |
 | `/backend-api/{public,ps}/plugins/workspace/...` | `client.chatgpt.plugins.shares` | Workspace plugin archive publication, created-plugin discovery, access targets, and deletion. |
-| Backend-issued plugin/skill bundle URLs | `client.chatgpt.plugins.bundles` | HTTPS-only bounded downloads plus safe atomic plugin extraction; OAuth is never forwarded to signed URLs. |
+| Backend-issued curated/plugin/skill bundle URLs | `client.chatgpt.plugins.bundles` | HTTPS-only bounded downloads plus safe atomic curated/plugin extraction; OAuth is never forwarded to signed URLs. |
 | `GET /backend-api/connectors/directory/...` | `client.chatgpt.connectors.directory` | Public/workspace connector catalogs with validated pagination. |
 | `/backend-api/aip/connectors/...` | `client.chatgpt.connectors` | Connector metadata, terms, logos, accessible links, and explicitly separated link-auth mutations. |
 | `POST /backend-api/ps/apps/batch` | `client.chatgpt.connectors.batch_metadata(...)` | Batched app metadata and optional tool schemas. |

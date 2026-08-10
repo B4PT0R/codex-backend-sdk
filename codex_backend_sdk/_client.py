@@ -462,6 +462,28 @@ class CodexClient:
         response.raise_for_status()
         return response
 
+    def _download_chatgpt_link(self, url: str) -> requests.Response:
+        """Download a backend-issued URL without leaking OAuth to external hosts."""
+        candidate = url.strip()
+        if candidate.startswith("/backend-api/"):
+            candidate = f"https://chatgpt.com{candidate}"
+        elif candidate.startswith("/__codex-api/"):
+            candidate = f"https://chatgpt.com/backend-api/{candidate[len('/__codex-api/'):]}"
+        parsed = urllib.parse.urlparse(candidate)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("ChatGPT returned an invalid download URL.")
+        uses_chatgpt_auth = (
+            parsed.hostname == "chatgpt.com" and parsed.path.startswith("/backend-api/")
+        )
+        response = self._request_with_retries(
+            "GET",
+            candidate,
+            timeout=self._timeout,
+            _use_session=uses_chatgpt_auth,
+        )
+        response.raise_for_status()
+        return response
+
     def _request_with_retries(self, method: str, url: str, **kwargs: Any) -> requests.Response:
         use_session = kwargs.pop("_use_session", True)
         return request_with_retries(

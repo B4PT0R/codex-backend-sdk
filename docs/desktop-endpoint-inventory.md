@@ -129,11 +129,14 @@ not present in `codex-rs`. Its main conversation transport is streaming:
 | GET | `/backend-api/conversations/{conversation_id}/files` | List conversation files. |
 | GET | `/backend-api/conversation/{id}/attachment/{file_id}` | Retrieve attachment metadata. |
 | GET | `/backend-api/conversation/{id}/attachment/{file_id}/download` | Download an attachment. |
+| GET | `/backend-api/global/search` | Search indexed product sources with per-source status. |
+| POST (stream) | `/backend-api/files/process_upload_stream` | Process an uploaded file as NDJSON events. |
 
 The same client includes pins, projects, shared links, GPTs (`/gizmos/...`),
 global search, file-library operations, and writing-block/widget endpoints.
 Pins, projects, shared links, and file-library operations are now exposed under
-`client.chatgpt`; GPTs, global search, and writing blocks remain inventory-only.
+`client.chatgpt`. Global search and the file-processing stream are also
+exposed; GPTs and writing blocks remain inventory-only.
 
 ## General ChatGPT model, voice, and session routes
 

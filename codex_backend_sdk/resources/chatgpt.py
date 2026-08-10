@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from io import BytesIO
+import json
 from pathlib import Path
-from typing import Any, Literal, TYPE_CHECKING
+from typing import Any, Iterator, Literal, TYPE_CHECKING
 
 from .._models import ChatGPTSpeech
 from .._utils import _jsonable
@@ -45,6 +46,7 @@ class ChatGPTResources:
         self.pins = ChatGPTPins(client)
         self.plugins = ChatGPTPlugins(client)
         self.projects = ChatGPTProjects(client)
+        self.search = ChatGPTSearch(client)
         self.shares = ChatGPTShares(client)
         self.voice = ChatGPTVoice(client)
         self.sentinel = ChatGPTSentinel(client)
@@ -160,6 +162,36 @@ class ChatGPTSentinel:
         return self._client._post_chatgpt("/sentinel/heartbeat", body=_object(body))
 
 
+class ChatGPTSearch:
+    """Cross-product search kept separate from conversation-title search."""
+
+    def __init__(self, client: CodexClient) -> None:
+        self._client = client
+
+    def global_search(
+        self,
+        query: str,
+        *,
+        cursor: str | None = None,
+        limit: int = 20,
+        sources: list[str] | tuple[str, ...] = ("conversation",),
+    ) -> dict[str, Any]:
+        _required(query, "query")
+        if limit < 1:
+            raise ValueError("Expected `limit` to be positive.")
+        if not sources or not all(isinstance(source, str) and source for source in sources):
+            raise ValueError("Expected at least one non-empty search source.")
+        return self._client._get_chatgpt(
+            "/global/search",
+            params={
+                "query": query,
+                "limit": limit,
+                "sources": list(sources),
+                **({} if cursor is None else {"cursor": cursor}),
+            },
+        )
+
+
 class ChatGPTConversations:
     def __init__(self, client: CodexClient) -> None:
         self._client = client
@@ -229,6 +261,21 @@ class ChatGPTConversations:
             "/f/conversation/resume",
             body=_object(body),
             headers={"Accept": "text/event-stream"},
+            stream=True,
+        )
+
+    def sidebar_stream(
+        self,
+        body: Any,
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> requests.Response:
+        """Start the Desktop sidebar SSE transport with caller-provided integrity headers."""
+        return self._client._request_chatgpt(
+            "POST",
+            "/sidebar/conversation",
+            body=_object(body),
+            headers={"Accept": "text/event-stream", **(headers or {})},
             stream=True,
         )
 
@@ -396,6 +443,26 @@ class ChatGPTFiles:
             }),
         )
 
+    def download(
+        self,
+        file_id: str,
+        *,
+        conversation_id: str | None = None,
+        gizmo_id: str | None = None,
+        post_id: str | None = None,
+        response_format: Literal["bytes", "bytes_io", "file", "response"] = "bytes",
+        output_path: str | Path | None = None,
+    ) -> bytes | BytesIO | Path | Any:
+        link = self.download_link(
+            file_id,
+            conversation_id=conversation_id,
+            gizmo_id=gizmo_id,
+            post_id=post_id,
+        )
+        return self._download_payload(
+            link, response_format=response_format, output_path=output_path
+        )
+
     def conversation_files(
         self,
         conversation_id: str,
@@ -433,6 +500,42 @@ class ChatGPTFiles:
             f"{_required(file_id, 'file_id')}/download",
             params=_params({"gizmo_id": gizmo_id}),
         )
+
+    def download_attachment(
+        self,
+        conversation_id: str,
+        file_id: str,
+        *,
+        gizmo_id: str | None = None,
+        response_format: Literal["bytes", "bytes_io", "file", "response"] = "bytes",
+        output_path: str | Path | None = None,
+    ) -> bytes | BytesIO | Path | Any:
+        link = self.attachment_download_link(
+            conversation_id, file_id, gizmo_id=gizmo_id
+        )
+        return self._download_payload(
+            link, response_format=response_format, output_path=output_path
+        )
+
+    def process_upload_events(self, body: Any) -> Iterator[dict[str, Any]]:
+        """Yield the NDJSON events emitted while ChatGPT processes an upload."""
+        response = self._client._request_chatgpt(
+            "POST",
+            "/files/process_upload_stream",
+            body=_object(body),
+            headers={"Accept": "application/x-ndjson"},
+            stream=True,
+        )
+        try:
+            for line in response.iter_lines(decode_unicode=True):
+                if not line:
+                    continue
+                event = json.loads(line)
+                if not isinstance(event, dict):
+                    raise RuntimeError("File processing returned a non-object NDJSON event.")
+                yield event
+        finally:
+            response.close()
 
     def list_library_files(self, body: Any | None = None) -> dict[str, Any]:
         return self._client._post_chatgpt(
@@ -482,3 +585,33 @@ class ChatGPTFiles:
         return self._client._get_chatgpt(
             f"/files/library/files/{_required(library_file_id, 'library_file_id')}/thumbnail"
         )
+
+    def _download_payload(
+        self,
+        payload: Any,
+        *,
+        response_format: Literal["bytes", "bytes_io", "file", "response"],
+        output_path: str | Path | None,
+    ) -> bytes | BytesIO | Path | Any:
+        if response_format not in {"bytes", "bytes_io", "file", "response"}:
+            raise ValueError(f"Unsupported `response_format`: {response_format!r}")
+        if response_format == "file" and output_path is None:
+            raise ValueError("`output_path` is required when `response_format='file'`.")
+        if response_format != "file" and output_path is not None:
+            raise ValueError("`output_path` is only valid when `response_format='file'`.")
+        if not isinstance(payload, dict):
+            raise RuntimeError("ChatGPT file download response is not an object.")
+        url = payload.get("download_url")
+        if not isinstance(url, str) or not url.strip():
+            raise RuntimeError("ChatGPT file download response is missing `download_url`.")
+        response = self._client._download_chatgpt_link(url)
+        if response_format == "response":
+            return response
+        content = response.content
+        if response_format == "bytes_io":
+            return BytesIO(content)
+        if response_format == "file":
+            destination = Path(output_path)
+            destination.write_bytes(content)
+            return destination
+        return content

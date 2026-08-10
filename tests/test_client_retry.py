@@ -95,3 +95,48 @@ def test_retry_retries_transport_timeout(monkeypatch):
     assert response.json() == {"ok": True}
     assert len(client._session.calls) == 2
     assert sleeps == [0]
+
+
+def test_chatgpt_backend_download_uses_authenticated_session():
+    response = _response(200, body=b"private")
+    client = RetryClient([response])
+
+    result = client._download_chatgpt_link("/backend-api/files/private")
+
+    assert result.content == b"private"
+    assert client._session.calls[0][1] == "https://chatgpt.com/backend-api/files/private"
+
+
+def test_external_signed_download_does_not_use_oauth_session(monkeypatch):
+    response = _response(200, body=b"signed")
+    calls = []
+
+    def external_request(method, url, **kwargs):
+        calls.append((method, url, kwargs))
+        return response
+
+    monkeypatch.setattr(transport_module.requests, "request", external_request)
+    client = RetryClient([])
+
+    result = client._download_chatgpt_link("https://cdn.example.test/signed?token=opaque")
+
+    assert result.content == b"signed"
+    assert client._session.calls == []
+    assert calls == [
+        (
+            "GET",
+            "https://cdn.example.test/signed?token=opaque",
+            {"timeout": 120},
+        )
+    ]
+
+
+def test_chatgpt_download_rejects_non_http_urls():
+    client = RetryClient([])
+
+    try:
+        client._download_chatgpt_link("file:///etc/passwd")
+    except ValueError as exc:
+        assert "invalid download URL" in str(exc)
+    else:
+        raise AssertionError("Expected invalid download URL")

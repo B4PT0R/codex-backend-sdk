@@ -199,6 +199,8 @@ official Desktop app.
 | `GET /backend-api/user_system_messages` | `client.codex.user_system_messages.retrieve()` | Raw ChatGPT customization/system-message payload. |
 | `GET /backend-api/wham/remote/control/{mfa_requirement,clients}` | `client.codex.remote_control.desktop` | Desktop/browser-client MFA readiness and paired-client discovery. |
 | `GET /backend-api/codex/remote/control/environments` | `client.codex.remote_control.desktop.environments` | Remote host discovery, with explicit rename/delete mutations. |
+| `GET /backend-api/global/search` | `client.chatgpt.search.global_search(...)` | Cross-product search with source status and pagination metadata. |
+| `POST /backend-api/files/process_upload_stream` | `client.chatgpt.files.process_upload_events(...)` | NDJSON upload-processing event stream. |
 | `POST /backend-api/wham/apps` | `client.chatgpt.apps.list_tools()` / `call_tool(...)` / `request(...)` | Hosted Apps/MCP JSON-RPC transport observed in Desktop. |
 | `/backend-api/ecosystem/...` | `client.chatgpt.apps` | Widget, launcher, MCP, and URL-safety helpers; install and launch operations remain explicit mutations. |
 | `POST /backend-api/ps/mcp` | `client.chatgpt.apps.connect_hosted_mcp()` | MCP Streamable HTTP connection with initialization, sessions, JSON/SSE responses, tools, and resources. |
@@ -250,6 +252,29 @@ remote_hosts = desktop.environments.list_all()
 
 Pairing/revoking browser clients and renaming/deleting remote hosts are explicit
 methods and are never performed by discovery calls.
+
+Global ChatGPT search remains distinct from conversation-title search:
+
+```python
+matches = client.chatgpt.search.global_search(
+    "release notes",
+    sources=("conversation",),
+    limit=20,
+)
+```
+
+File download helpers follow backend-issued links and can return `bytes`, a
+`BytesIO`, a persisted `Path`, or the raw HTTP response. OAuth headers are kept
+for ChatGPT backend links and deliberately omitted from signed external CDN
+requests:
+
+```python
+content = client.chatgpt.files.download("file_...")
+buffer = client.chatgpt.files.download_attachment(
+    "conversation_...", "file_...", response_format="bytes_io"
+)
+events = list(client.chatgpt.files.process_upload_events({"file_id": "file_..."}))
+```
 
 `client.chatgpt.conversations` exposes explicit history, search, batch, CRUD,
 branch, prepare, streaming-create/resume, and attachment-list operations.

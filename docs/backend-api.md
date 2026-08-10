@@ -640,6 +640,30 @@ implicitly.
 
 ---
 
+## ChatGPT search and conversation-side streams
+
+`client.chatgpt.search.global_search()` exposes
+`GET /backend-api/global/search` independently from
+`client.chatgpt.conversations.search()`. Global search accepts a source list
+and preserves `source_statuses` and `partial_results`, which are important when
+one indexed source times out. A live OAuth probe of the conversation source
+returned the observed `cursor`, `items`, `partial_results`, and
+`source_statuses` shape.
+
+`client.chatgpt.conversations.sidebar_stream()` exposes the raw Desktop
+`POST /backend-api/sidebar/conversation` SSE response. It accepts explicit
+integrity headers because those are owned by the caller's Sentinel/session
+lifecycle; the SDK does not fabricate them.
+
+File metadata and download-link APIs remain under `client.chatgpt.files`.
+`download()` and `download_attachment()` resolve backend-issued links into
+bytes, `BytesIO`, a file, or a raw response. Authenticated ChatGPT backend links
+use the OAuth session, while external signed links are fetched without OAuth
+headers. `process_upload_events()` exposes the official
+`/files/process_upload_stream` NDJSON pipeline and always closes its response.
+
+---
+
 ## ChatGPT File Uploads
 
 ### `POST /backend-api/files`

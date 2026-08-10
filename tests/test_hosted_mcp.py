@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from codex_backend_sdk import ChatGPTAppsProtocolError, OpenAI
+from codex_backend_sdk import ChatGPTAppsProtocolError, OpenAI, __version__
 
 
 class FakeResponse:
@@ -66,7 +66,7 @@ def test_hosted_mcp_initializes_with_official_protocol_and_headers():
         "params": {
             "protocolVersion": "2025-06-18",
             "capabilities": {},
-            "clientInfo": {"name": "codex-backend-sdk", "version": "0.3.10"},
+            "clientInfo": {"name": "codex-backend-sdk", "version": __version__},
         },
     }
     assert kwargs["headers"] == {

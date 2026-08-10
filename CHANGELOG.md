@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [0.4.0] - 2026-08-10
+
 ### Added
 - Added a dedicated `client.chatgpt` product namespace covering Desktop
   conversations, projects, files, search, pins, shares, GPTs, account/session,

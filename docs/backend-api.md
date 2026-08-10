@@ -669,6 +669,11 @@ official `OAI-Product-Sku: codex` header; pagination preserves `pageToken` and
 rejects repeated tokens. `include_download_urls` is opt-in so ordinary catalog
 reads do not mint signed bundle URLs unnecessarily.
 
+`skill(plugin_id, skill_name)` retrieves the backend-authored `SKILL.md`
+contents and additive bundle metadata while verifying that both returned
+identifiers match the request. A live probe returned a valid skill detail and
+Markdown body from the current global catalog.
+
 A read-only live probe returned 184 global catalog entries, three installed
 plugins, 40 suggestions, valid search/detail responses, and an empty workspace
 shared page for the test account. `plugins.installation.install/uninstall`

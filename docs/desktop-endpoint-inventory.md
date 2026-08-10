@@ -194,6 +194,13 @@ signed archive upload, created-share discovery, access-target management, and
 deletion are exposed under `.plugins.shares`; only created-share discovery was
 probed live.
 
+Current Codex also reads `/ps/plugins/{id}/skills/{name}`; the SDK exposes and
+live-probes this detail route with identifier validation. Its Agent Identity
+JWKS and `auth.openai.com/api/accounts/v1/agent/...` registration routes remain
+excluded: they manage durable signing keys and authenticated task assertions,
+which are security/attestation infrastructure rather than a generic OAuth
+backend convenience surface.
+
 ## Apps, connectors, and files
 
 Verified route families include:

@@ -157,6 +157,25 @@ class ChatGPTPlugins:
             raise RuntimeError("Plugin detail response is missing its identifier.")
         return payload
 
+    def skill(self, plugin_id: str, skill_name: str) -> dict[str, Any]:
+        expected_id = _required(plugin_id, "plugin_id")
+        expected_name = _required(skill_name, "skill_name")
+        payload = self._client._get_chatgpt(
+            (
+                f"/ps/plugins/{_path(expected_id, 'plugin_id')}/skills/"
+                f"{_path(expected_name, 'skill_name')}"
+            ),
+            headers=_headers(),
+        )
+        if payload.get("plugin_id") != expected_id:
+            raise RuntimeError("Plugin skill response returned an unexpected plugin ID.")
+        if payload.get("name") != expected_name:
+            raise RuntimeError("Plugin skill response returned an unexpected skill name.")
+        contents = payload.get("skill_md_contents")
+        if contents is not None and not isinstance(contents, str):
+            raise RuntimeError("Plugin skill response returned invalid Markdown contents.")
+        return payload
+
     def _page(self, path: str, *, params: dict[str, Any]) -> dict[str, Any]:
         payload = self._client._get_chatgpt(path, params=params, headers=_headers())
         _validate_page(payload)

@@ -70,6 +70,11 @@ def test_remote_plugin_catalog_search_and_detail_match_current_codex_contract():
         "/ps/plugins/workspace/shared": page,
         "/ps/plugins/suggested": {"enabled": True, "plugins": []},
         "/ps/plugins/plugins~linear": {"id": "plugins~linear"},
+        "/ps/plugins/plugins~linear/skills/create-issue": {
+            "plugin_id": "plugins~linear",
+            "name": "create-issue",
+            "skill_md_contents": "# Create issue",
+        },
     }
     plugins = client.chatgpt.plugins
 
@@ -82,6 +87,9 @@ def test_remote_plugin_catalog_search_and_detail_match_current_codex_contract():
     assert plugins.suggested()["enabled"] is True
     assert plugins.retrieve("plugins~linear", include_download_urls=True)["id"] == (
         "plugins~linear"
+    )
+    assert plugins.skill("plugins~linear", "create-issue")["skill_md_contents"] == (
+        "# Create issue"
     )
 
     headers = {"OAI-Product-Sku": "codex"}
@@ -125,6 +133,12 @@ def test_remote_plugin_catalog_search_and_detail_match_current_codex_contract():
             "GET",
             "/ps/plugins/plugins~linear",
             {"includeDownloadUrls": True},
+            headers,
+        ),
+        (
+            "GET",
+            "/ps/plugins/plugins~linear/skills/create-issue",
+            None,
             headers,
         ),
     ]

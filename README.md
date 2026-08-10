@@ -244,6 +244,7 @@ curated_export = client.chatgpt.plugins.curated_export()
 remote_plugins = client.chatgpt.plugins.list_all(scope="GLOBAL")
 installed_plugins = client.chatgpt.plugins.installed_all()
 search_page = client.chatgpt.plugins.search("issue tracking", limit=10)
+skill_markdown = client.chatgpt.plugins.skill("plugins~...", "skill-name")
 my_shared_plugins = client.chatgpt.plugins.shares.created_all()
 
 # Connector discovery is read-only; authentication and external actions live

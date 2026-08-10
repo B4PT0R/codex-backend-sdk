@@ -59,6 +59,7 @@ proves current account availability, not a public compatibility guarantee.
 | `GET /backend-api/ps/plugins/suggested` | `client.chatgpt.plugins.suggested` | live; 40 suggestions observed |
 | `GET /backend-api/ps/plugins/workspace/shared` | `client.chatgpt.plugins.workspace_shared` | live; empty workspace page observed |
 | `GET /backend-api/ps/plugins/{id}` | `client.chatgpt.plugins.retrieve` | live |
+| `GET /backend-api/ps/plugins/{id}/skills/{name}` | `client.chatgpt.plugins.skill` | live |
 | `POST /backend-api/ps/plugins/{id}/install` | `client.chatgpt.plugins.installation.install` | contract; explicit mutation |
 | `POST /backend-api/ps/plugins/{id}/uninstall` | `client.chatgpt.plugins.installation.uninstall` | contract; explicit mutation |
 | `GET /backend-api/ps/plugins/workspace/created` | `client.chatgpt.plugins.shares.created/created_all` | live; empty page observed |
@@ -105,7 +106,7 @@ proves current account availability, not a public compatibility guarantee.
 | Profile and photo | `client.codex.profile` | live read; update/photo mutations contract |
 | Preferences and workspace messages | `client.codex.config`, `.workspace_messages` | live reads |
 | Worktree snapshot upload/finalize | `client.codex.worktree_snapshots` | contract; explicit storage mutation |
-| Desktop onboarding | not exposed | inventory |
+| Desktop onboarding context/completion | not exposed | excluded; official-client lifecycle only |
 
 ## Exclusions
 
@@ -114,3 +115,11 @@ feature bootstrap, telemetry, analytics, and beacon endpoints are excluded by
 default. They are commercially sensitive, security-sensitive, administrative,
 or observability surfaces rather than useful primitives for independent
 harnesses.
+
+| Method and path | Status and rationale |
+| --- | --- |
+| `GET/POST /backend-api/wham/onboarding/...` | excluded; mutates official Desktop onboarding state rather than providing a harness primitive |
+| `GET /backend-api/wham/sites/access` | excluded; feature-gate bootstrap without an independently reusable Sites protocol |
+| `GET /backend-api/accounts/check/v4-2023-04-27` | excluded; subscription/credit-management contract |
+| `GET /backend-api/wham/agent-identities/jwks` | excluded; security-sensitive Agent Identity verification surface |
+| `POST https://auth.openai.com/api/accounts/v1/agent/...` | excluded; registers durable signing keys and task assertions, within the goal's identity/attestation exclusion |

@@ -186,6 +186,7 @@ official Desktop app.
 | `GET /backend-api/wham/profiles/me` | `client.codex.profile.retrieve()` | Token-usage profile used by current Codex clients. |
 | `GET /backend-api/wham/workspace-messages` | `client.codex.workspace_messages.list()` | Workspace-scoped backend messages. |
 | `POST /backend-api/wham/tasks` | `client.codex.tasks.create(...)` | Creates a Codex cloud task from a raw evolving backend payload. |
+| `POST /backend-api/wham/worktree_snapshots/...` | `client.codex.worktree_snapshots` | Uploads a caller-prepared worktree archive through signed storage and finalizes it for cloud-task use. |
 | `POST /backend-api/wham/remote/control/server/enroll` | `client.codex.remote_control.enroll(...)` | Enrolls a Codex-compatible Remote Control server. |
 | `POST /backend-api/wham/remote/control/server/refresh` | `client.codex.remote_control.refresh(...)` | Renews its short-lived Remote Control token. |
 | `WSS /backend-api/wham/remote/control/server` | `client.codex.remote_control.connect(...)` | Opens the protocol-v3 envelope transport with cursor resume. |

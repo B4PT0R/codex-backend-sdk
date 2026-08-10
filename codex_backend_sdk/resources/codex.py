@@ -20,6 +20,7 @@ class CodexResources:
 
     def __init__(self, client: CodexClient) -> None:
         from .remote_control import RemoteControl
+        from .worktree_snapshots import CodexWorktreeSnapshots
 
         self._client = client
         self.accounts = CodexAccounts(client)
@@ -31,6 +32,7 @@ class CodexResources:
         self.repositories = CodexRepositories(client)
         self.config = CodexConfig(client)
         self.workspace_messages = CodexWorkspaceMessages(client)
+        self.worktree_snapshots = CodexWorktreeSnapshots(client)
         self.remote_control = RemoteControl(client)
         self.rate_limit_reset_credits = CodexRateLimitResetCredits(client)
         self.user_system_messages = CodexUserSystemMessages(client)

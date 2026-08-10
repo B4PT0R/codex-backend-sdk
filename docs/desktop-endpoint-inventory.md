@@ -74,8 +74,8 @@ Codex account, cloud-task, environment, and Remote Control concepts.
 | DELETE | `/backend-api/wham/environments/{environment_id}` | Delete an environment. |
 | POST | `/backend-api/wham/environments/{environment_id}/reset-cache` | Reset an environment cache. |
 | GET | `/backend-api/wham/machines` | List available cloud machines. |
-| POST | `/backend-api/wham/worktree_snapshots/upload_url` | Begin a worktree snapshot upload. |
-| POST | `/backend-api/wham/worktree_snapshots/finish_upload` | Finalize a worktree snapshot upload. |
+| POST | `/backend-api/wham/worktree_snapshots/upload_url` | Begin an upload; exposed by `client.codex.worktree_snapshots`. |
+| POST | `/backend-api/wham/worktree_snapshots/finish_upload` | Finalize an upload; exposed by `client.codex.worktree_snapshots`. |
 | GET | `/backend-api/wham/tasks/{task_id}/turns/{turn_id}` | Retrieve a specific cloud-task turn. |
 | GET | `/backend-api/wham/tasks/{task_id}/turns/{turn_id}/logs` | Retrieve task-turn logs. |
 | POST | `/backend-api/wham/tasks/{task_id}/turns/{turn_id}/pr` | Create or update task pull-request state. |
@@ -223,7 +223,7 @@ only at the family level.
 1. Add read-only usage detail and cloud task-turn/log helpers.
 2. Complete environment and repository discovery with explicit mutation
    methods separated from reads.
-3. Add worktree snapshot upload and any remaining cloud-task operations.
+3. Audit any remaining cloud-task operations against current official clients.
 4. Record deeper model/voice/system-hint response schemas.
 5. Audit the remaining specialized Desktop surfaces against their value to an
    independent harness, keeping external mutations explicit.

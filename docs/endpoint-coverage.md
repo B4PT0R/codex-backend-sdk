@@ -89,7 +89,7 @@ proves current account availability, not a public compatibility guarantee.
 | Tasks, turns, logs, archives/cancel/recover/read | `client.codex.tasks` | live reads; mutations contract |
 | Environments, machines, repository/branch discovery | `client.codex.environments`, `.repositories` | live reads; mutations contract |
 | Profile, preferences, workspace messages | `client.codex.profile`, `.config`, `.workspace_messages` | live reads; mutations contract |
-| Worktree snapshot upload | not exposed | inventory |
+| Worktree snapshot upload/finalize | `client.codex.worktree_snapshots` | contract; explicit storage mutation |
 | Desktop onboarding | not exposed | inventory |
 
 ## Exclusions

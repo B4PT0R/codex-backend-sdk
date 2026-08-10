@@ -392,6 +392,24 @@ ChatGPT routes than `codex-rs`; see
 [`desktop-endpoint-inventory.md`](desktop-endpoint-inventory.md) for the audited
 snapshot, Desktop-only comparison, and exposure recommendations.
 
+### Worktree snapshots
+
+`client.codex.worktree_snapshots` implements Desktop's transport for attaching
+a local worktree snapshot to a cloud-task environment:
+
+1. `create_upload(...)` sends repository/archive metadata to
+   `/wham/worktree_snapshots/upload_url`;
+2. the archive is uploaded to the returned signed URL without the ChatGPT OAuth
+   session or `Authorization` header;
+3. `finish_upload(...)` sends the returned `file_id` and `etag` to
+   `/wham/worktree_snapshots/finish_upload`.
+
+`upload_archive(...)` composes those steps for an existing archive. It does not
+invent Desktop's private Git/archive-preparation policy: independent harnesses
+remain responsible for selecting files, preserving repository metadata, and
+constructing the tarball they intend to send. The backend allocation/finalize
+contract is covered locally but was not invoked live because it mutates storage.
+
 ### `GET /backend-api/wham/usage`
 
 Rate limits and quota for this account. Used as the auth probe — a 200 response confirms valid tokens.

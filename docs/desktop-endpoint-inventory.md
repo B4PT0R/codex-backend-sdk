@@ -131,12 +131,17 @@ not present in `codex-rs`. Its main conversation transport is streaming:
 | GET | `/backend-api/conversation/{id}/attachment/{file_id}/download` | Download an attachment. |
 | GET | `/backend-api/global/search` | Search indexed product sources with per-source status. |
 | POST (stream) | `/backend-api/files/process_upload_stream` | Process an uploaded file as NDJSON events. |
+| GET | `/backend-api/celsius/ws/user` | Obtain the user conversation-continuation WebSocket URL. |
+| GET | `/backend-api/flora/subagent/thread/turns` | Retrieve turns mapped to a delegated subagent thread. |
+| POST | `/backend-api/conversation/{id}/message/{message_id}/genui/refresh_widget` | Refresh a generated UI widget. |
+| POST | `/backend-api/conversation/{id}/message/{message_id}/dil/view_state` | Persist DIL view state. |
 
 The same client includes pins, projects, shared links, GPTs (`/gizmos/...`),
 global search, file-library operations, and writing-block/widget endpoints.
 Pins, projects, shared links, and file-library operations are now exposed under
 `client.chatgpt`. Global search and the file-processing stream are also
-exposed; GPTs and writing blocks remain inventory-only.
+exposed. Generic GPT detail, subagent-turn reads, and generated-widget refresh
+are now exposed as well; writing blocks remain inventory-only.
 
 ## General ChatGPT model, voice, and session routes
 
@@ -145,11 +150,13 @@ exposed; GPTs and writing blocks remain inventory-only.
 | GET | `/backend-api/models` | Available ChatGPT models. |
 | GET | `/backend-api/models/slugs` | Model slug metadata. |
 | GET | `/backend-api/models/config` | Model configuration. |
+| GET | `/backend-api/tpp/models/` | Third-party-provider model catalog. |
 | GET | `/backend-api/settings/voices` | Available ChatGPT voices. |
 | POST | `/backend-api/transcribe` | Multipart audio transcription; already exposed by this SDK. |
 | POST | `/backend-api/codex/dictation-stream-connect-info` | Connection information for streaming dictation. |
 | POST | `/backend-api/pronunciation/synthesize?format=mp3` | Read-aloud synthesis returning base64 MP3 audio. |
 | GET | `/backend-api/system_hints` | Account/session system hints. |
+| GET | `/backend-api/hermes/agent/{agent_id}/system-hint` | Custom-agent system hint. |
 | GET | `/backend-api/settings/user` | ChatGPT user settings. |
 | GET | `/backend-api/me` | Current ChatGPT user. |
 | POST | `/backend-api/sentinel/chat-requirements/prepare` | Prepare Sentinel session requirements. |

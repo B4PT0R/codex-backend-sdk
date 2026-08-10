@@ -662,6 +662,26 @@ use the OAuth session, while external signed links are fetched without OAuth
 headers. `process_upload_events()` exposes the official
 `/files/process_upload_stream` NDJSON pipeline and always closes its response.
 
+### Projects, custom GPTs, and subagent data
+
+`client.chatgpt.projects` covers the complete project subset observed in
+Desktop: paginated sidebar discovery, detail, conversations, connector scopes,
+saves, creation/update/deletion, and file attachment. `list_all()` validates
+page shapes and rejects repeated cursors. The live account returned a valid
+empty project page; mutations were not probed.
+
+`client.chatgpt.gizmos.retrieve()` exposes generic custom-GPT metadata without
+misclassifying every gizmo as a project. Conversation helpers expose the
+read-only `/flora/subagent/thread/turns` mapping and the live-verified
+`/celsius/ws/user` continuation WebSocket URL. Rating, DIL view-state, and
+generated-widget refresh operations are explicitly named mutations.
+
+`client.chatgpt.models.third_party()` returned four TPP models in a live probe.
+System hints and custom-agent system hints follow the exact Desktop query
+contract. The optional `/models/slugs` route currently returns 404 and is
+normalized to `None`, matching the official client's compatibility behavior;
+other HTTP failures remain visible.
+
 ---
 
 ## ChatGPT File Uploads

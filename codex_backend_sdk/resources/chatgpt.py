@@ -6,6 +6,9 @@ from io import BytesIO
 import json
 from pathlib import Path
 from typing import Any, Iterator, Literal, TYPE_CHECKING
+from urllib.parse import quote
+
+import requests
 
 from .._models import ChatGPTSpeech
 from .._utils import _jsonable
@@ -34,6 +37,10 @@ def _params(values: dict[str, Any]) -> dict[str, Any] | None:
     return result or None
 
 
+def _path(value: str, name: str) -> str:
+    return quote(_required(value, name), safe="")
+
+
 class ChatGPTResources:
     """Desktop-observed ChatGPT APIs kept separate from Codex APIs."""
 
@@ -42,6 +49,7 @@ class ChatGPTResources:
         self.apps = ChatGPTApps(client)
         self.conversations = ChatGPTConversations(client)
         self.files = ChatGPTFiles(client)
+        self.gizmos = ChatGPTGizmos(client)
         self.models = ChatGPTModels(client)
         self.pins = ChatGPTPins(client)
         self.plugins = ChatGPTPlugins(client)
@@ -71,6 +79,22 @@ class ChatGPTAccount:
     def user_system_messages(self) -> dict[str, Any]:
         return self._client._get_chatgpt("/user_system_messages")
 
+    def set_user_setting(self, feature: str, value: Any) -> None:
+        self._client._request_chatgpt(
+            "PATCH",
+            "/settings/account_user_setting",
+            params={"feature": _required(feature, "feature"), "value": value},
+        )
+
+    def set_voice(self, voice_name: str) -> None:
+        self.set_user_setting("voice_name", _required(voice_name, "voice_name"))
+
+    def set_ultra_effort_enabled(self, enabled: bool) -> None:
+        self.set_user_setting("model_picker_persists_ultra_effort", enabled)
+
+    def opt_out_of_trusted_contact_prompts(self) -> None:
+        self.set_user_setting("trusted_contacts_opted_out_at", True)
+
 
 class ChatGPTModels:
     def __init__(self, client: CodexClient) -> None:
@@ -79,11 +103,45 @@ class ChatGPTModels:
     def list(self) -> dict[str, Any]:
         return self._client._get_chatgpt("/models")
 
-    def slugs(self) -> dict[str, Any]:
-        return self._client._get_chatgpt("/models/slugs")
+    def slugs(self) -> dict[str, Any] | None:
+        try:
+            return self._client._get_chatgpt("/models/slugs")
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 404:
+                return None
+            raise
 
-    def config(self) -> dict[str, Any]:
-        return self._client._get_chatgpt("/models/config")
+    def config(self, slug: str) -> dict[str, Any]:
+        return self._client._get_chatgpt(
+            "/models/config", params={"slug": _required(slug, "slug")}
+        )
+
+    def third_party(self) -> dict[str, Any]:
+        return self._client._get_chatgpt(
+            "/tpp/models/", params={"iim": False, "include_icons": False}
+        )
+
+    def system_hints(
+        self,
+        *,
+        mode: str | None = None,
+        exclude_logo: bool | None = None,
+    ) -> dict[str, Any]:
+        return self._client._get_chatgpt(
+            "/system_hints",
+            params=_params({"mode": mode, "exclude_logo": exclude_logo}),
+        )
+
+    def custom_agent_system_hint(
+        self,
+        agent_id: str,
+        *,
+        system_hint: str | None = None,
+    ) -> dict[str, Any]:
+        return self._client._get_chatgpt(
+            f"/hermes/agent/{_path(agent_id, 'agent_id')}/system-hint",
+            params=_params({"system_hint": system_hint}),
+        )
 
 
 class ChatGPTVoice:
@@ -217,6 +275,31 @@ class ChatGPTConversations:
     def batch(self, body: Any) -> dict[str, Any]:
         return self._client._post_chatgpt("/conversations/batch", body=_object(body))
 
+    def websocket_url(self) -> str:
+        payload = self._client._get_chatgpt("/celsius/ws/user")
+        url = payload.get("websocket_url")
+        if not isinstance(url, str) or not url:
+            raise RuntimeError("Conversation WebSocket response is missing its URL.")
+        return url
+
+    def subagent_thread_turns(
+        self,
+        conversation_id: str,
+        thread_id: str,
+        *,
+        limit: int = 1,
+    ) -> dict[str, Any]:
+        if limit < 1:
+            raise ValueError("Expected `limit` to be positive.")
+        return self._client._get_chatgpt(
+            "/flora/subagent/thread/turns",
+            params={
+                "conversationId": _required(conversation_id, "conversation_id"),
+                "threadId": _required(thread_id, "thread_id"),
+                "limit": limit,
+            },
+        )
+
     def retrieve(self, conversation_id: str) -> dict[str, Any]:
         return self._client._get_chatgpt(
             f"/conversation/{_required(conversation_id, 'conversation_id')}"
@@ -284,6 +367,39 @@ class ChatGPTConversations:
             f"/conversations/{_required(conversation_id, 'conversation_id')}/files"
         )
 
+    def rate(self, conversation_id: str, body: Any) -> dict[str, Any]:
+        return self._client._post_chatgpt(
+            f"/conversation/{_path(conversation_id, 'conversation_id')}/rating",
+            body=_object(body),
+        )
+
+    def persist_dil_view_state(
+        self,
+        conversation_id: str,
+        message_id: str,
+        body: Any,
+    ) -> dict[str, Any]:
+        return self._client._post_chatgpt(
+            f"/conversation/{_path(conversation_id, 'conversation_id')}/message/"
+            f"{_path(message_id, 'message_id')}/dil/view_state",
+            body=_object(body),
+        )
+
+    def refresh_widget(
+        self,
+        conversation_id: str,
+        message_id: str,
+        *,
+        ref_index: int,
+    ) -> dict[str, Any]:
+        if ref_index < 0:
+            raise ValueError("Expected `ref_index` to be non-negative.")
+        return self._client._post_chatgpt(
+            f"/conversation/{_path(conversation_id, 'conversation_id')}/message/"
+            f"{_path(message_id, 'message_id')}/genui/refresh_widget",
+            body={"ref_index": ref_index},
+        )
+
 
 class ChatGPTPins:
     def __init__(self, client: CodexClient) -> None:
@@ -309,6 +425,18 @@ class ChatGPTPins:
         return None
 
 
+class ChatGPTGizmos:
+    """Generic custom-GPT metadata; projects are a specialized gizmo subtype."""
+
+    def __init__(self, client: CodexClient) -> None:
+        self._client = client
+
+    def retrieve(self, gizmo_id_or_short_url: str) -> dict[str, Any]:
+        return self._client._get_chatgpt(
+            f"/gizmos/{_path(gizmo_id_or_short_url, 'gizmo_id_or_short_url')}"
+        )
+
+
 class ChatGPTProjects:
     def __init__(self, client: CodexClient) -> None:
         self._client = client
@@ -321,6 +449,8 @@ class ChatGPTProjects:
         limit: int = 20,
         owned_only: bool = True,
     ) -> dict[str, Any]:
+        if limit < 1:
+            raise ValueError("Expected `limit` to be positive.")
         return self._client._get_chatgpt(
             "/gizmos/snorlax/sidebar",
             params={
@@ -331,9 +461,40 @@ class ChatGPTProjects:
             },
         )
 
+    def list_all(
+        self,
+        *,
+        conversations_per_project: int = 0,
+        owned_only: bool = True,
+    ) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        cursor: str | None = None
+        seen_cursors: set[str] = set()
+        while True:
+            page = self.list(
+                conversations_per_project=conversations_per_project,
+                cursor=cursor,
+                owned_only=owned_only,
+            )
+            page_items = page.get("items")
+            if not isinstance(page_items, list) or not all(
+                isinstance(item, dict) for item in page_items
+            ):
+                raise RuntimeError("Projects response contains an invalid item list.")
+            items.extend(page_items)
+            next_cursor = page.get("cursor")
+            if next_cursor is None:
+                return items
+            if not isinstance(next_cursor, str) or not next_cursor:
+                raise RuntimeError("Projects response contains an invalid cursor.")
+            if next_cursor in seen_cursors:
+                raise RuntimeError("Projects response returned a repeated cursor.")
+            seen_cursors.add(next_cursor)
+            cursor = next_cursor
+
     def retrieve(self, project_id_or_short_url: str) -> dict[str, Any]:
         return self._client._get_chatgpt(
-            f"/gizmos/{_required(project_id_or_short_url, 'project_id_or_short_url')}"
+            f"/gizmos/{_path(project_id_or_short_url, 'project_id_or_short_url')}"
         )
 
     def create(self, body: Any) -> dict[str, Any]:
@@ -341,11 +502,11 @@ class ChatGPTProjects:
 
     def update(self, project_id: str, body: Any) -> dict[str, Any]:
         return self._client._patch_chatgpt(
-            f"/projects/{_required(project_id, 'project_id')}", body=_object(body)
+            f"/projects/{_path(project_id, 'project_id')}", body=_object(body)
         )
 
     def delete(self, project_id: str) -> None:
-        self._client._delete_chatgpt(f"/gizmos/{_required(project_id, 'project_id')}")
+        self._client._delete_chatgpt(f"/gizmos/{_path(project_id, 'project_id')}")
 
     def conversations(
         self,
@@ -355,8 +516,10 @@ class ChatGPTProjects:
         limit: int = 5,
         owned_only: bool = True,
     ) -> dict[str, Any]:
+        if limit < 1:
+            raise ValueError("Expected `limit` to be positive.")
         return self._client._get_chatgpt(
-            f"/gizmos/{_required(project_id, 'project_id')}/conversations",
+            f"/gizmos/{_path(project_id, 'project_id')}/conversations",
             params={"cursor": cursor, "limit": limit, "owned_only": owned_only},
         )
 
@@ -367,8 +530,10 @@ class ChatGPTProjects:
         cursor: str | None = None,
         limit: int = 100,
     ) -> dict[str, Any]:
+        if limit < 1:
+            raise ValueError("Expected `limit` to be positive.")
         return self._client._get_chatgpt(
-            f"/projects/{_required(project_id, 'project_id')}/connector_scopes",
+            f"/projects/{_path(project_id, 'project_id')}/connector_scopes",
             params={"cursor": cursor, "limit": limit},
         )
 
@@ -379,21 +544,23 @@ class ChatGPTProjects:
         cursor: str | None = None,
         limit: int = 100,
     ) -> dict[str, Any]:
+        if limit < 1:
+            raise ValueError("Expected `limit` to be positive.")
         return self._client._get_chatgpt(
-            f"/projects/{_required(project_id, 'project_id')}/saves",
+            f"/projects/{_path(project_id, 'project_id')}/saves",
             params={"cursor": cursor, "limit": limit},
         )
 
     def attach_files(self, project_id: str, body: Any) -> dict[str, Any]:
         return self._client._post_chatgpt(
-            f"/projects/{_required(project_id, 'project_id')}/files",
+            f"/projects/{_path(project_id, 'project_id')}/files",
             body=_object(body),
         )
 
     def delete_file(self, project_id: str, file_id: str) -> None:
         self._client._delete_chatgpt(
-            f"/projects/{_required(project_id, 'project_id')}/files/"
-            f"{_required(file_id, 'file_id')}"
+            f"/projects/{_path(project_id, 'project_id')}/files/"
+            f"{_path(file_id, 'file_id')}"
         )
 
 

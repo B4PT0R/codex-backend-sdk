@@ -61,14 +61,19 @@ proves current account availability, not a public compatibility guarantee.
 | --- | --- | --- |
 | Models, voices, system hints, account | `client.chatgpt.models`, `.voice`, `.account` | live reads |
 | Conversation list/search/CRUD/streaming | `client.chatgpt.conversations` | live reads; mutations contract |
+| Conversation continuation WebSocket URL | `client.chatgpt.conversations.websocket_url` | live |
+| Subagent turns, rating, DIL state, widget refresh | `client.chatgpt.conversations` | reads contract; mutations explicit |
 | Global indexed search | `client.chatgpt.search.global_search` | live |
 | Sidebar conversation SSE | `client.chatgpt.conversations.sidebar_stream` | contract; caller-owned integrity headers |
 | Projects and project files | `client.chatgpt.projects` | live reads; mutations contract |
+| Generic custom-GPT detail | `client.chatgpt.gizmos.retrieve` | contract |
 | File library, downloads, and upload-processing stream | `client.chatgpt.files`, `client.files` | live reads; streams/mutations contract |
 | Pins and shared links | `client.chatgpt.pins`, `.shares` | live reads; mutations contract |
 | Pronunciation synthesis | `client.chatgpt.voice.synthesize_pronunciation` | live |
 | Sentinel session routes | `client.chatgpt.sentinel` | contract |
-| GPTs and writing blocks | not exposed | inventory |
+| TPP models and system/custom-agent hints | `client.chatgpt.models` | live catalogs/hints; custom-agent contract |
+| Account preference mutations | `client.chatgpt.account` | contract; explicit mutations |
+| Writing blocks | not exposed | inventory |
 | Connector metadata/linking/actions | not exposed | inventory |
 
 ## Codex cloud resources

@@ -201,6 +201,9 @@ official Desktop app.
 | `GET /backend-api/codex/remote/control/environments` | `client.codex.remote_control.desktop.environments` | Remote host discovery, with explicit rename/delete mutations. |
 | `GET /backend-api/global/search` | `client.chatgpt.search.global_search(...)` | Cross-product search with source status and pagination metadata. |
 | `POST /backend-api/files/process_upload_stream` | `client.chatgpt.files.process_upload_events(...)` | NDJSON upload-processing event stream. |
+| `GET /backend-api/celsius/ws/user` | `client.chatgpt.conversations.websocket_url()` | User-scoped ChatGPT conversation continuation WebSocket URL. |
+| `GET /backend-api/tpp/models/` | `client.chatgpt.models.third_party()` | Third-party-provider model catalog available to the account. |
+| `GET /backend-api/gizmos/{id}` | `client.chatgpt.gizmos.retrieve(...)` | Generic custom-GPT metadata; projects remain a specialized resource. |
 | `POST /backend-api/wham/apps` | `client.chatgpt.apps.list_tools()` / `call_tool(...)` / `request(...)` | Hosted Apps/MCP JSON-RPC transport observed in Desktop. |
 | `/backend-api/ecosystem/...` | `client.chatgpt.apps` | Widget, launcher, MCP, and URL-safety helpers; install and launch operations remain explicit mutations. |
 | `POST /backend-api/ps/mcp` | `client.chatgpt.apps.connect_hosted_mcp()` | MCP Streamable HTTP connection with initialization, sessions, JSON/SSE responses, tools, and resources. |
@@ -275,6 +278,24 @@ buffer = client.chatgpt.files.download_attachment(
 )
 events = list(client.chatgpt.files.process_upload_events({"file_id": "file_..."}))
 ```
+
+Projects and generic custom GPTs are separate concepts even though both use
+ChatGPT's gizmo storage:
+
+```python
+projects = client.chatgpt.projects.list_all()
+gizmo = client.chatgpt.gizmos.retrieve("g-...")
+subagent_turns = client.chatgpt.conversations.subagent_thread_turns(
+    "conversation_...", "thread_..."
+)
+conversation_websocket = client.chatgpt.conversations.websocket_url()
+```
+
+Model helpers expose the regular and TPP catalogs, system hints, custom-agent
+hints, and optional internal slugs. `models.slugs()` returns `None` when that
+optional Desktop route is unavailable instead of turning its expected 404 into
+a hard failure. Account preference writes (`set_voice`, ultra effort, trusted
+contact opt-out) are explicit mutation methods.
 
 `client.chatgpt.conversations` exposes explicit history, search, batch, CRUD,
 branch, prepare, streaming-create/resume, and attachment-list operations.

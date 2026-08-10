@@ -32,6 +32,26 @@ originator: codex_cli_rs
   directly. In observed Pro-plan tests, `POST /v1/embeddings` and
   `POST /v1/audio/transcriptions` work with `Authorization: Bearer <access_token>`.
 
+### Device-code authentication
+
+Codex also implements a headless login suitable for remote harnesses and
+machines that cannot receive a loopback OAuth callback:
+
+1. `POST https://auth.openai.com/api/accounts/deviceauth/usercode` with the
+   Codex `client_id` returns `device_auth_id`, `user_code`, and a polling
+   interval. The user enters the code at `https://auth.openai.com/codex/device`.
+2. `POST https://auth.openai.com/api/accounts/deviceauth/token` polls with the
+   two codes until it returns an authorization code, verifier, and challenge.
+3. `POST https://auth.openai.com/oauth/token` exchanges that code with the
+   verifier and `https://auth.openai.com/deviceauth/callback` redirect URI.
+
+`client.authenticate_device_code(...)` owns the complete sequence;
+`request_device_code()` and `complete_device_code_login()` expose its two phases
+for UI-driven harnesses. A live, non-destructive initiation returned the current
+contract and a five-second polling interval. The final approval/exchange remains
+contract-tested because it requires an explicit user login action. Optional
+workspace allowlisting is checked before credentials are persisted.
+
 ---
 
 ## Codex API endpoints

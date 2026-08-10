@@ -47,6 +47,21 @@ interactive ChatGPT OAuth flow when needed. `logout()` is local and idempotent:
 it clears the shared Codex credential file and unauthenticates the current
 client; it does not revoke the ChatGPT account session remotely.
 
+Headless and remote harnesses can use Codex's official device-code flow without
+opening a local callback listener:
+
+```python
+client = OpenAI().authenticate_device_code(
+    on_code=lambda code: print(code.verification_url, code.user_code),
+    allowed_workspace_ids=["optional-workspace-id"],
+)
+```
+
+The callback receives a short-lived `DeviceCode` that the user must approve in
+a browser. The SDK polls for completion, performs the PKCE token exchange, and
+persists the resulting Codex credentials by default. `allowed_workspace_ids`
+can restrict which ChatGPT workspace may be selected before anything is saved.
+
 ## Streaming
 
 ```python
@@ -166,6 +181,8 @@ official Desktop app.
 
 | Backend endpoint | SDK method | Notes |
 |---|---|---|
+| `POST https://auth.openai.com/api/accounts/deviceauth/usercode` | `client.authenticate_device_code(...)` / `request_device_code()` | Starts Codex's browser-assisted device login for headless or remote harnesses. |
+| `POST https://auth.openai.com/api/accounts/deviceauth/token` + `POST /oauth/token` | `complete_device_code_login(...)` | Polls the pending authorization and exchanges its PKCE code for the ordinary Codex OAuth token set. |
 | `POST /backend-api/codex/responses` | `client.responses.create(...)` | Stream-only backend; non-streaming SDK calls are collected from SSE events. |
 | `WSS /backend-api/codex/responses` | `client.responses.websocket.connect()` | Reusable sequential `response.create` transport with raw forward-compatible events, handshake metadata and structured error envelopes. |
 | `POST /backend-api/codex/responses/compact` | `client.responses.compact(...)` | Codex-specific helper for encrypted context compaction. |

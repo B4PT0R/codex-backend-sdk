@@ -11,10 +11,12 @@ Flow:
 """
 
 import threading
+import time
 import urllib.parse
 import webbrowser
+from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Optional
+from typing import Callable, Optional
 
 import requests
 
@@ -27,6 +29,18 @@ CALLBACK_PORT = 1455
 REDIRECT_URI = f"http://localhost:{CALLBACK_PORT}/auth/callback"
 SCOPES = "openid profile email offline_access api.connectors.read api.connectors.invoke"
 ORIGINATOR = "codex_cli_rs"
+
+
+@dataclass(frozen=True)
+class DeviceCode:
+    """Pending Codex device authorization initiated by this process."""
+
+    verification_url: str
+    user_code: str
+    device_auth_id: str
+    interval: float
+    issuer: str = ISSUER
+    client_id: str = CLIENT_ID
 
 # Result container shared between the HTTP handler and the caller
 _oauth_result: dict = {}
@@ -185,6 +199,143 @@ def refresh_access_token(refresh_token: str) -> dict:
     )
     resp.raise_for_status()
     return resp.json()
+
+
+def request_device_code(
+    *, issuer: str = ISSUER, client_id: str = CLIENT_ID
+) -> DeviceCode:
+    """Start Codex's official headless/device authorization flow."""
+    base = _auth_issuer(issuer)
+    client = _required_text(client_id, "client_id")
+    response = requests.post(
+        f"{base}/api/accounts/deviceauth/usercode",
+        json={"client_id": client},
+        timeout=30,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise RuntimeError("Device authorization returned a non-object response.")
+    device_auth_id = _required_payload_text(payload, "device_auth_id")
+    user_code = payload.get("user_code", payload.get("usercode"))
+    if not isinstance(user_code, str) or not user_code:
+        raise RuntimeError("Device authorization response is missing `user_code`.")
+    try:
+        interval = float(payload.get("interval", 0))
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("Device authorization returned an invalid polling interval.") from exc
+    if interval < 0:
+        raise RuntimeError("Device authorization returned a negative polling interval.")
+    return DeviceCode(
+        verification_url=f"{base}/codex/device",
+        user_code=user_code,
+        device_auth_id=device_auth_id,
+        interval=interval,
+        issuer=base,
+        client_id=client,
+    )
+
+
+def complete_device_code_login(
+    device_code: DeviceCode,
+    *,
+    timeout: float = 15 * 60,
+    persist: bool = True,
+    allowed_workspace_ids: list[str] | tuple[str, ...] | None = None,
+    _sleep: Callable[[float], None] = time.sleep,
+    _monotonic: Callable[[], float] = time.monotonic,
+) -> TokenStore:
+    """Poll, exchange and optionally persist a pending device authorization."""
+    if not isinstance(device_code, DeviceCode):
+        raise TypeError("Expected `device_code` to be a DeviceCode.")
+    if timeout <= 0:
+        raise ValueError("Expected `timeout` to be positive.")
+    started = _monotonic()
+    poll_url = f"{device_code.issuer}/api/accounts/deviceauth/token"
+    while True:
+        response = requests.post(
+            poll_url,
+            json={
+                "device_auth_id": device_code.device_auth_id,
+                "user_code": device_code.user_code,
+            },
+            timeout=30,
+        )
+        if response.ok:
+            authorization = response.json()
+            break
+        if response.status_code not in {403, 404}:
+            response.raise_for_status()
+        elapsed = _monotonic() - started
+        if elapsed >= timeout:
+            raise TimeoutError(f"Device authorization timed out after {timeout:g} seconds.")
+        _sleep(max(0.1, min(device_code.interval, max(0.0, timeout - elapsed))))
+
+    if not isinstance(authorization, dict):
+        raise RuntimeError("Device authorization poll returned a non-object response.")
+    authorization_code = _required_payload_text(authorization, "authorization_code")
+    code_verifier = _required_payload_text(authorization, "code_verifier")
+    _required_payload_text(authorization, "code_challenge")
+    token_response = requests.post(
+        f"{device_code.issuer}/oauth/token",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        data={
+            "grant_type": "authorization_code",
+            "code": authorization_code,
+            "redirect_uri": f"{device_code.issuer}/deviceauth/callback",
+            "client_id": device_code.client_id,
+            "code_verifier": code_verifier,
+        },
+        timeout=30,
+    )
+    token_response.raise_for_status()
+    tokens = token_response.json()
+    if not isinstance(tokens, dict):
+        raise RuntimeError("Device token exchange returned a non-object response.")
+    access_token = _required_payload_text(tokens, "access_token")
+    refresh_token = _required_payload_text(tokens, "refresh_token")
+    id_token = _required_payload_text(tokens, "id_token")
+    try:
+        openai_api_key = obtain_api_key(id_token)
+    except requests.HTTPError:
+        openai_api_key = None
+    store = TokenStore.from_exchange(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        id_token=id_token,
+        openai_api_key=openai_api_key,
+    )
+    if allowed_workspace_ids is not None:
+        allowed = {_required_text(item, "allowed_workspace_id") for item in allowed_workspace_ids}
+        if store.account_id not in allowed:
+            raise PermissionError(
+                "Device authorization selected a workspace outside `allowed_workspace_ids`."
+            )
+    if persist:
+        save_tokens(store)
+    return store
+
+
+def _auth_issuer(issuer: str) -> str:
+    value = _required_text(issuer, "issuer").rstrip("/")
+    parsed = urllib.parse.urlparse(value)
+    loopback = parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+    if not parsed.netloc or (parsed.scheme != "https" and not (loopback and parsed.scheme == "http")):
+        raise ValueError("Expected `issuer` to use HTTPS or loopback HTTP.")
+    return value
+
+
+def _required_text(value: str, name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"Expected `{name}` to be a non-empty string.")
+    return value
+
+
+def _required_payload_text(payload: dict, name: str) -> str:
+    value = payload.get(name)
+    if not isinstance(value, str) or not value:
+        raise RuntimeError(f"Device authorization response is missing `{name}`.")
+    return value
 
 
 def run_oauth_flow(

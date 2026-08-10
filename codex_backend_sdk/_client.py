@@ -112,6 +112,35 @@ class CodexClient:
         self._set_store(run_oauth_flow())
         return self
 
+    def authenticate_device_code(
+        self,
+        *,
+        on_code: Any = None,
+        persist: bool = True,
+        timeout: float = 15 * 60,
+        allowed_workspace_ids: list[str] | tuple[str, ...] | None = None,
+    ) -> "CodexClient":
+        """Authenticate without a callback listener, using Codex device login."""
+        from .oauth import complete_device_code_login, request_device_code
+
+        device_code = request_device_code()
+        if on_code is None:
+            print(
+                "Open this URL and enter the one-time code (only continue if you "
+                "started this login):\n"
+                f"  {device_code.verification_url}\n  {device_code.user_code}"
+            )
+        else:
+            on_code(device_code)
+        store = complete_device_code_login(
+            device_code,
+            timeout=timeout,
+            persist=persist,
+            allowed_workspace_ids=allowed_workspace_ids,
+        )
+        self._set_store(store)
+        return self
+
     @property
     def authenticated(self) -> bool:
         """Whether this client currently has OAuth credentials loaded."""

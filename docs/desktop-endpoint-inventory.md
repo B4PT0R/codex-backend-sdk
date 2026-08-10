@@ -46,6 +46,13 @@ reusable bearer path currently present in the official clients. Refresh requests
 intentionally omit a `scope` parameter, matching `codex-rs`, so the authorization
 server preserves the original connector scopes rather than narrowing them.
 
+For headless and remote use, current `codex-rs` additionally implements the
+browser-assisted `/api/accounts/deviceauth/usercode` and `deviceauth/token`
+flow. It produces the same ordinary Codex OAuth credentials rather than a wider
+Desktop grant. The SDK exposes both the high-level flow and its start/complete
+phases; a live initiation confirmed the current response contract, while final
+approval is covered locally because it requires an interactive account action.
+
 A read-only live probe with an existing Codex OAuth access token returned HTTP
 200 for representative Desktop-only reads: ChatGPT models, voices, system
 hints, conversations, projects and pins, plus WHAM daily token and credit usage.

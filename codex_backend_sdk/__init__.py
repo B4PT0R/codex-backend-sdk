@@ -19,7 +19,13 @@ Quickstart:
 
 __version__ = "0.3.10"
 
-from .oauth import run_oauth_flow, refresh_access_token
+from .oauth import (
+    DeviceCode,
+    complete_device_code_login,
+    refresh_access_token,
+    request_device_code,
+    run_oauth_flow,
+)
 from .storage import load_tokens, save_tokens, TokenStore
 from .resources.remote_control import (
     RemoteControlClient,
@@ -87,6 +93,7 @@ __all__ = [
     "CreateEmbeddingResponse",
     "Embedding",
     "EmbeddingUsage",
+    "DeviceCode",
     "ImageData",
     "ImageResponse",
     "RateLimitResetCredit",
@@ -126,6 +133,8 @@ __all__ = [
     "image_b64",
     "run_oauth_flow",
     "refresh_access_token",
+    "request_device_code",
+    "complete_device_code_login",
     "load_tokens",
     "save_tokens",
     "TokenStore",

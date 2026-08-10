@@ -15,6 +15,7 @@ from .._utils import _jsonable
 from .chatgpt_apps import ChatGPTApps
 from .chatgpt_connectors import ChatGPTConnectors
 from .chatgpt_plugins import ChatGPTPlugins
+from .chatgpt_writing_blocks import ChatGPTWritingBlocks
 
 if TYPE_CHECKING:
     from .._client import CodexClient
@@ -59,6 +60,7 @@ class ChatGPTResources:
         self.search = ChatGPTSearch(client)
         self.shares = ChatGPTShares(client)
         self.voice = ChatGPTVoice(client)
+        self.writing_blocks = ChatGPTWritingBlocks(client)
         self.sentinel = ChatGPTSentinel(client)
 
 

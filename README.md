@@ -212,6 +212,7 @@ official Desktop app.
 | `GET /backend-api/connectors/directory/...` | `client.chatgpt.connectors.directory` | Public/workspace connector catalogs with validated pagination. |
 | `/backend-api/aip/connectors/...` | `client.chatgpt.connectors` | Connector metadata, terms, logos, accessible links, and explicitly separated link-auth mutations. |
 | `POST /backend-api/ps/apps/batch` | `client.chatgpt.connectors.batch_metadata(...)` | Batched app metadata and optional tool schemas. |
+| `POST /backend-api/conversation/message/writing-blocks[/magic-edit]` | `client.chatgpt.writing_blocks` | Persists writing blocks and requests model-assisted Markdown replacements. |
 
 Desktop-observed ChatGPT surfaces are deliberately separate from the Codex
 protocol:
@@ -244,6 +245,17 @@ detail = client.chatgpt.connectors.retrieve(
     connectors[0]["id"], include_actions=True
 )
 links = client.chatgpt.connectors.links.list_accessible()
+
+# Persist a Desktop-compatible writing block, or request replacement choices
+# for an explicitly marked Markdown range.
+choices = client.chatgpt.writing_blocks.magic_edit(
+    conversation_id="conv_...",
+    full_block_body_markdown="Hello world",
+    start_index=6,
+    end_index=11,
+    marked_block_body_markdown="Hello ⟦MAGICSTART⟧world⟦MAGICEND⟧",
+    instruction="Make this warmer",
+)
 ```
 
 Hosted tools can mutate connected external services. Independent harnesses

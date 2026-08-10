@@ -145,7 +145,8 @@ global search, file-library operations, and writing-block/widget endpoints.
 Pins, projects, shared links, and file-library operations are now exposed under
 `client.chatgpt`. Global search and the file-processing stream are also
 exposed. Generic GPT detail, subagent-turn reads, and generated-widget refresh
-are now exposed as well; writing blocks remain inventory-only.
+are now exposed as well. Writing-block persistence and model-assisted editing
+are exposed separately under `client.chatgpt.writing_blocks`.
 
 ## General ChatGPT model, voice, and session routes
 

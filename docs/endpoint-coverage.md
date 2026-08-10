@@ -75,7 +75,7 @@ proves current account availability, not a public compatibility guarantee.
 | Sentinel session routes | `client.chatgpt.sentinel` | contract |
 | TPP models and system/custom-agent hints | `client.chatgpt.models` | live catalogs/hints; custom-agent contract |
 | Account preference mutations | `client.chatgpt.account` | contract; explicit mutations |
-| Writing blocks | not exposed | inventory |
+| Writing-block persistence and magic edit | `client.chatgpt.writing_blocks` | contract; explicit conversation mutation/inference |
 | Connector detail, terms, logo, and current link | `client.chatgpt.connectors` | live reads |
 | Accessible connector links | `client.chatgpt.connectors.links.list_accessible` | live; 9 links observed |
 | Connector no-auth/OAuth linking and reauthentication | `client.chatgpt.connectors.authentication` | contract; explicit mutations |

@@ -685,6 +685,23 @@ external-action mutations were contract-tested but deliberately not invoked.
 
 ---
 
+## Writing blocks and magic edit
+
+`client.chatgpt.writing_blocks.update(body)` persists the complete writing-block
+envelope used by Desktop, including conversation/message/block identity and the
+nested block content. The envelope remains raw because it is a private product
+schema and includes variant-specific metadata.
+
+`magic_edit(...)` exposes the reusable model-assisted editing primitive. It
+accepts the full Markdown document, a validated character range, Desktop's
+marked-range representation, an instruction, one or more requested variations,
+and the observed `generate`, `edit`, or `full-edit` mode. The SDK validates the
+response's replacement-choice list while preserving additive fields such as the
+backend model slug. Both routes modify conversation state or consume inference,
+so they are contract-tested but were not invoked during read-only probing.
+
+---
+
 ## ChatGPT search and conversation-side streams
 
 `client.chatgpt.search.global_search()` exposes

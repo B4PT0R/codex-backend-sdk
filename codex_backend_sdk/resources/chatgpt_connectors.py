@@ -57,6 +57,22 @@ class ChatGPTConnectors:
             headers={"OAI-Product-Sku": "CODEX"},
         )
 
+    def product_specific(self, purpose: str) -> dict[str, Any]:
+        """List connectors selected by ChatGPT for a product purpose."""
+        payload = self._client._get_chatgpt(
+            "/aip/connectors/product_specific",
+            params={"purpose": _required(purpose, "purpose")},
+            headers={"OAI-Product-Sku": "CODEX"},
+        )
+        connectors = payload.get("connectors") if isinstance(payload, dict) else None
+        if not isinstance(connectors, list) or not all(
+            isinstance(connector, dict) for connector in connectors
+        ):
+            raise RuntimeError(
+                "Product-specific connector response contains an invalid connector list."
+            )
+        return payload
+
     def terms(self, connector_id: str) -> dict[str, Any]:
         return self._client._get_chatgpt(
             f"/aip/connectors/{_path(connector_id, 'connector_id')}/tos",

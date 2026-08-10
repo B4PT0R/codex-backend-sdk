@@ -26,6 +26,8 @@ class FakeConnectorClient(OpenAI):
         self.calls.append(("GET", path, params, headers))
         if path == "/connectors/directory/list":
             return self.directory_pages.pop(0)
+        if path == "/aip/connectors/product_specific":
+            return {"connectors": [{"id": "connector-github"}]}
         if path.endswith("/link"):
             return {"link": None}
         if path.endswith("/logo"):
@@ -85,6 +87,7 @@ def test_connector_metadata_detail_terms_logo_and_batch_contracts():
     client.chatgpt.connectors.retrieve(
         "connector /1", include_actions=True, include_logo=False
     )
+    product = client.chatgpt.connectors.product_specific("hermes")
     client.chatgpt.connectors.terms("connector /1")
     logo = client.chatgpt.connectors.logo("connector /1", theme="dark")
     batch = client.chatgpt.connectors.batch_metadata(
@@ -93,11 +96,18 @@ def test_connector_metadata_detail_terms_logo_and_batch_contracts():
 
     assert logo["contentType"] == "image/png"
     assert batch["apps"][0]["id"] == "connector-1"
+    assert product["connectors"][0]["id"] == "connector-github"
     assert client.calls == [
         (
             "GET",
             "/aip/connectors/connector%20%2F1",
             {"include_actions": True, "include_logo": False},
+            {"OAI-Product-Sku": "CODEX"},
+        ),
+        (
+            "GET",
+            "/aip/connectors/product_specific",
+            {"purpose": "hermes"},
             {"OAI-Product-Sku": "CODEX"},
         ),
         (

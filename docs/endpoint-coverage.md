@@ -95,6 +95,7 @@ proves current account availability, not a public compatibility guarantee.
 | Account preference mutations | `client.chatgpt.account` | contract; explicit mutations |
 | Writing-block persistence and magic edit | `client.chatgpt.writing_blocks` | contract; explicit conversation mutation/inference |
 | Connector detail, terms, logo, and current link | `client.chatgpt.connectors` | live reads |
+| `GET /backend-api/aip/connectors/product_specific` | `client.chatgpt.connectors.product_specific` | contract; live personal account had no active workspace |
 | Accessible connector links | `client.chatgpt.connectors.links.list_accessible` | live; 9 links observed |
 | Connector no-auth/OAuth linking and reauthentication | `client.chatgpt.connectors.authentication` | contract; explicit mutations |
 | Contacts and email actions | `client.chatgpt.connectors.external_actions` | contract; caller-owned external-action approval |
@@ -108,7 +109,9 @@ proves current account availability, not a public compatibility guarantee.
 | Tasks, turns, logs, archives/cancel/recover/read | `client.codex.tasks` | live reads; mutations contract |
 | Environments, machines, repository/branch discovery | `client.codex.environments`, `.repositories` | live reads; mutations contract |
 | Profile and photo | `client.codex.profile` | live read; update/photo mutations contract |
-| Preferences and workspace messages | `client.codex.config`, `.workspace_messages` | live reads |
+| `GET /wham/settings/configs/user-preferences` | `client.codex.config.user_preferences_config` | live |
+| `GET/PATCH /wham/settings/user` | `client.codex.config.user_settings/update_user_settings` | live read; mutation contract |
+| Workspace messages | `client.codex.workspace_messages` | live read |
 | Worktree snapshot upload/finalize | `client.codex.worktree_snapshots` | contract; explicit storage mutation |
 | Desktop onboarding context/completion | not exposed | excluded; official-client lifecycle only |
 

@@ -517,12 +517,19 @@ Fetch the selected cloud-managed Codex configuration bundle.
 
 ---
 
-### `GET /backend-api/wham/settings/user`
+### `GET/PATCH /backend-api/wham/settings/user`
 
 Fetch authenticated Codex user settings. Current Codex requests this with
 cache bypass headers; callers should treat the raw payload as evolving.
 
-**SDK method**: `client.codex.config.user_settings()`
+**SDK methods**: `client.codex.config.user_settings()` and the explicit
+`client.codex.config.update_user_settings(body)` mutation.
+
+Desktop also reads `GET /backend-api/wham/settings/configs/user-preferences` to
+obtain managed editor limits and special values. It is exposed as
+`client.codex.config.user_preferences_config()`; a live OAuth probe returned
+the branch-format length, special values, and custom-instruction character
+limit. The PATCH contract is tested but was not invoked live.
 
 ---
 
@@ -764,6 +771,8 @@ Codex and Desktop clients without conflating catalog reads with authority:
 - `retrieve()`, `terms()`, `logo()`, and `batch_metadata()` return connector
   metadata, action safety annotations, legal text, branding, and optional tool
   schemas;
+- `product_specific(purpose)` reproduces Desktop's `OAI-Product-Sku: CODEX`
+  purpose selection used for cloud-environment connectors;
 - `links.retrieve()` and `links.list_accessible()` inspect the account's current
   link state;
 - `authentication` contains the no-auth, OAuth, reauthentication, and callback
@@ -771,6 +780,11 @@ Codex and Desktop clients without conflating catalog reads with authority:
 - `external_actions` contains the Desktop contacts and email routes. Sending or
   undoing email may modify an external service, so an independent harness must
   apply its own confirmation policy.
+
+The `product_specific("hermes")` contract is sourced directly from Desktop's
+lazy cloud-environments chunk. On the current personal account the backend
+returned HTTP 400 because this purpose requires an active workspace, so it is
+contract-covered but not marked live-account available.
 
 The same external-action namespace exposes
 `upload_google_drive_file(path, title=...)`. It sends Desktop's exact multipart

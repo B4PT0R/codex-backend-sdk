@@ -241,6 +241,11 @@ discovery and link inspection are separate from `authentication` mutations and
 the `external_actions` namespace. Email actions can affect external state; the
 SDK therefore leaves confirmation policy explicitly to the calling harness.
 
+The lazy cloud-environments chunk additionally reads
+`/aip/connectors/product_specific?purpose=hermes` with
+`OAI-Product-Sku: CODEX`. It is exposed as a discovery method; the current
+personal account probe returned the backend's active-workspace requirement.
+
 ## Deliberately excluded from SDK exposure
 
 The bundle also references endpoints for subscriptions and payments, referrals,

@@ -31,6 +31,8 @@ class FakeCodexClient(OpenAI):
             return {"bundle": {"version": "1"}}
         if path == "/wham/settings/user":
             return {"settings": {"theme": "system"}}
+        if path == "/wham/settings/configs/user-preferences":
+            return {"configs": [{"key": "branch_name_template"}]}
         if path == "/wham/accounts/check":
             return {"account": {"eligible": True}}
         if path == "/wham/profiles/me":
@@ -372,10 +374,22 @@ def test_codex_config_exposes_bundle_and_user_settings():
 
     assert client.codex.config.bundle() == {"bundle": {"version": "1"}}
     assert client.codex.config.user_settings() == {"settings": {"theme": "system"}}
+    assert client.codex.config.user_preferences_config() == {
+        "configs": [{"key": "branch_name_template"}]
+    }
+    assert client.codex.config.update_user_settings(
+        {"branch_name_template": "codex/{task}"}
+    ) == {"id": "env_1", "branch_name_template": "codex/{task}"}
     assert client.wham_gets == [
         ("/wham/config/bundle", None),
         ("/wham/settings/user", None),
+        ("/wham/settings/configs/user-preferences", None),
     ]
+    assert client.wham_patches == [
+        ("/wham/settings/user", {"branch_name_template": "codex/{task}"})
+    ]
+    with pytest.raises(TypeError, match="JSON object"):
+        client.codex.config.update_user_settings(["invalid"])
 
 
 def test_codex_tasks_create_posts_raw_backend_payload():

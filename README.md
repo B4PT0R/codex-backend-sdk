@@ -184,6 +184,8 @@ official Desktop app.
 | `GET /backend-api/wham/config/requirements` | `client.codex.config.requirements()` | Raw managed requirements/config payload for the authenticated account. |
 | `GET /backend-api/wham/config/bundle` | `client.codex.config.bundle()` | Selected cloud-managed Codex configuration bundle. |
 | `GET /backend-api/wham/settings/user` | `client.codex.config.user_settings()` | Authenticated Codex user settings. |
+| `GET /backend-api/wham/settings/configs/user-preferences` | `client.codex.config.user_preferences_config()` | Managed limits and special values for cloud preference editors. |
+| `PATCH /backend-api/wham/settings/user` | `client.codex.config.update_user_settings(...)` | Explicit cloud preference mutation using the official raw payload. |
 | `GET /backend-api/wham/accounts/check` | `client.codex.accounts.check()` | Account availability and entitlement check. |
 | `GET/PATCH /backend-api/wham/profiles/me` | `client.codex.profile` | Token-usage profile plus explicit display-name, username, and profile-asset mutations. |
 | `POST /backend-api/wham/profiles/me/photo` | `client.codex.profile.upload_photo(...)` / `set_photo(...)` | Multipart image upload returning the asset pointer expected by profile updates. |
@@ -218,6 +220,7 @@ official Desktop app.
 | Backend-issued curated/plugin/skill bundle URLs | `client.chatgpt.plugins.bundles` | HTTPS-only bounded downloads plus safe atomic curated/plugin extraction; OAuth is never forwarded to signed URLs. |
 | `GET /backend-api/connectors/directory/...` | `client.chatgpt.connectors.directory` | Public/workspace connector catalogs with validated pagination. |
 | `/backend-api/aip/connectors/...` | `client.chatgpt.connectors` | Connector metadata, terms, logos, accessible links, and explicitly separated link-auth mutations. |
+| `GET /backend-api/aip/connectors/product_specific` | `client.chatgpt.connectors.product_specific(...)` | Product-purpose connector selection used by Desktop cloud environments. |
 | `POST /backend-api/ps/apps/batch` | `client.chatgpt.connectors.batch_metadata(...)` | Batched app metadata and optional tool schemas. |
 | `POST /backend-api/conversation/message/writing-blocks[/magic-edit]` | `client.chatgpt.writing_blocks` | Persists writing blocks and requests model-assisted Markdown replacements. |
 
@@ -259,6 +262,7 @@ checkout = client.chatgpt.plugins.bundles.extract_plugin(
 # Connector discovery is read-only; authentication and external actions live
 # in separate, explicitly named authority namespaces.
 connectors = client.chatgpt.connectors.directory.list_all()
+cloud_connectors = client.chatgpt.connectors.product_specific("hermes")
 detail = client.chatgpt.connectors.retrieve(
     connectors[0]["id"], include_actions=True
 )

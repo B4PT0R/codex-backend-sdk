@@ -201,6 +201,17 @@ class CodexConfig:
     def user_settings(self) -> dict[str, Any]:
         return self._client._get_wham("/wham/settings/user")
 
+    def user_preferences_config(self) -> dict[str, Any]:
+        """Return the managed schema/constraints for Codex cloud preferences."""
+        return self._client._get_wham("/wham/settings/configs/user-preferences")
+
+    def update_user_settings(self, body: Any) -> dict[str, Any]:
+        """Explicitly replace or update Codex cloud user preferences."""
+        payload = _jsonable(body)
+        if not isinstance(payload, dict):
+            raise TypeError("Expected `body` to serialize to a JSON object.")
+        return self._client._patch_wham("/wham/settings/user", body=payload)
+
 
 class CodexTasks:
     """Codex cloud task data for the authenticated account."""

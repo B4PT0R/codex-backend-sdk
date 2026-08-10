@@ -50,6 +50,10 @@ hints, conversations, projects and pins, plus WHAM daily token and credit usage.
 This confirms that the normal Codex bearer grant, rather than a hidden Desktop
 grant, is the reusable authorization path for these surfaces.
 
+The same grant also returned the connector public and workspace directories,
+batched app metadata, connector detail/terms/link metadata, and accessible
+links. Connector authentication and external actions were not invoked live.
+
 ## High-value Codex/WHAM routes absent from `codex-rs`
 
 These are the closest fit for future SDK resources because they extend existing
@@ -195,9 +199,10 @@ Verified route families include:
 - `/backend-api/wham/apps/google_drive/upload` for native Google Workspace file
   conversion/upload.
 
-The connector email actions and OAuth link mutations can affect external state.
-They must not be wrapped as generic convenience methods without explicit safety
-semantics and confirmation ownership.
+These routes are now exposed under `client.chatgpt.connectors`. Read-only
+discovery and link inspection are separate from `authentication` mutations and
+the `external_actions` namespace. Email actions can affect external state; the
+SDK therefore leaves confirmation policy explicitly to the calling harness.
 
 ## Deliberately excluded from SDK exposure
 
@@ -220,5 +225,5 @@ only at the family level.
    methods separated from reads.
 3. Add worktree snapshot upload and any remaining cloud-task operations.
 4. Record deeper model/voice/system-hint response schemas.
-5. Add connector directory/authentication reads before exposing explicitly
-   separated external-service mutations.
+5. Audit the remaining specialized Desktop surfaces against their value to an
+   independent harness, keeping external mutations explicit.

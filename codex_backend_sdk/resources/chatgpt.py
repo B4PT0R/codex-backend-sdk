@@ -13,6 +13,7 @@ import requests
 from .._models import ChatGPTSpeech
 from .._utils import _jsonable
 from .chatgpt_apps import ChatGPTApps
+from .chatgpt_connectors import ChatGPTConnectors
 from .chatgpt_plugins import ChatGPTPlugins
 
 if TYPE_CHECKING:
@@ -48,6 +49,7 @@ class ChatGPTResources:
         self.account = ChatGPTAccount(client)
         self.apps = ChatGPTApps(client)
         self.conversations = ChatGPTConversations(client)
+        self.connectors = ChatGPTConnectors(client)
         self.files = ChatGPTFiles(client)
         self.gizmos = ChatGPTGizmos(client)
         self.models = ChatGPTModels(client)

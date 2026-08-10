@@ -54,6 +54,8 @@ proves current account availability, not a public compatibility guarantee.
 | `GET /backend-api/plugins/export/curated` | `client.chatgpt.plugins.curated_export` | live |
 | `GET /backend-api/plugins/featured` | `client.chatgpt.plugins.featured` | live; 29 Codex IDs observed |
 | `POST /backend-api/ps/mcp` | `client.chatgpt.apps.connect_hosted_mcp` | live; MCP 2025-06-18, 172 tools, 37 resources |
+| `GET /backend-api/connectors/directory/list[_workspace]` | `client.chatgpt.connectors.directory` | live; 2,614 apps observed |
+| `POST /backend-api/ps/apps/batch` | `client.chatgpt.connectors.batch_metadata` | live |
 
 ## ChatGPT product resources
 
@@ -74,7 +76,10 @@ proves current account availability, not a public compatibility guarantee.
 | TPP models and system/custom-agent hints | `client.chatgpt.models` | live catalogs/hints; custom-agent contract |
 | Account preference mutations | `client.chatgpt.account` | contract; explicit mutations |
 | Writing blocks | not exposed | inventory |
-| Connector metadata/linking/actions | not exposed | inventory |
+| Connector detail, terms, logo, and current link | `client.chatgpt.connectors` | live reads |
+| Accessible connector links | `client.chatgpt.connectors.links.list_accessible` | live; 9 links observed |
+| Connector no-auth/OAuth linking and reauthentication | `client.chatgpt.connectors.authentication` | contract; explicit mutations |
+| Contacts and email actions | `client.chatgpt.connectors.external_actions` | contract; caller-owned external-action approval |
 
 ## Codex cloud resources
 

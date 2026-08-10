@@ -640,6 +640,33 @@ implicitly.
 
 ---
 
+## Connector discovery, linking, and external authority
+
+`client.chatgpt.connectors` exposes the connector contracts shared by current
+Codex and Desktop clients without conflating catalog reads with authority:
+
+- `directory.list()` / `list_all()` cover the public and workspace directory
+  routes and validate app lists and pagination tokens;
+- `retrieve()`, `terms()`, `logo()`, and `batch_metadata()` return connector
+  metadata, action safety annotations, legal text, branding, and optional tool
+  schemas;
+- `links.retrieve()` and `links.list_accessible()` inspect the account's current
+  link state;
+- `authentication` contains the no-auth, OAuth, reauthentication, and callback
+  mutations; discovery methods never call these implicitly;
+- `external_actions` contains the Desktop contacts and email routes. Sending or
+  undoing email may modify an external service, so an independent harness must
+  apply its own confirmation policy.
+
+The ordinary Codex OAuth grant already includes `api.connectors.read` and
+`api.connectors.invoke`; Desktop does not obtain a broader reusable bearer
+grant. Read-only live probes returned 2,614 directory apps, valid batch/detail/
+terms/link payloads, and nine accessible links for the test account. These
+counts describe one account and date, not a stable service guarantee. Auth and
+external-action mutations were contract-tested but deliberately not invoked.
+
+---
+
 ## ChatGPT search and conversation-side streams
 
 `client.chatgpt.search.global_search()` exposes

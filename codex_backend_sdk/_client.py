@@ -375,12 +375,14 @@ class CodexClient:
         path: str,
         *,
         params: Optional[dict[str, Any]] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> dict[str, Any]:
         self._ensure_auth()
         response = self._request_with_retries(
             "GET",
             f"{CHATGPT_BASE_URL}{path}",
             params=params,
+            headers=headers,
             timeout=30,
         )
         response.raise_for_status()

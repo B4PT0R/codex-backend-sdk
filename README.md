@@ -208,6 +208,9 @@ official Desktop app.
 | `/backend-api/ecosystem/...` | `client.chatgpt.apps` | Widget, launcher, MCP, and URL-safety helpers; install and launch operations remain explicit mutations. |
 | `POST /backend-api/ps/mcp` | `client.chatgpt.apps.connect_hosted_mcp()` | MCP Streamable HTTP connection with initialization, sessions, JSON/SSE responses, tools, and resources. |
 | `GET /backend-api/plugins/...` | `client.chatgpt.plugins` | Featured plugin IDs and curated export metadata used by Codex. |
+| `GET /backend-api/connectors/directory/...` | `client.chatgpt.connectors.directory` | Public/workspace connector catalogs with validated pagination. |
+| `/backend-api/aip/connectors/...` | `client.chatgpt.connectors` | Connector metadata, terms, logos, accessible links, and explicitly separated link-auth mutations. |
+| `POST /backend-api/ps/apps/batch` | `client.chatgpt.connectors.batch_metadata(...)` | Batched app metadata and optional tool schemas. |
 
 Desktop-observed ChatGPT surfaces are deliberately separate from the Codex
 protocol:
@@ -232,6 +235,14 @@ with client.chatgpt.apps.connect_hosted_mcp() as mcp:
 
 featured = client.chatgpt.plugins.featured(platform="codex")
 curated_export = client.chatgpt.plugins.curated_export()
+
+# Connector discovery is read-only; authentication and external actions live
+# in separate, explicitly named authority namespaces.
+connectors = client.chatgpt.connectors.directory.list_all()
+detail = client.chatgpt.connectors.retrieve(
+    connectors[0]["id"], include_actions=True
+)
+links = client.chatgpt.connectors.links.list_accessible()
 ```
 
 Hosted tools can mutate connected external services. Independent harnesses
@@ -240,6 +251,13 @@ calling them; the SDK does not silently invoke or auto-install anything.
 `connect_hosted_mcp()` follows Codex's protocol version `2025-06-18`, sends the
 required `X-OpenAI-Product-Sku` header, accepts JSON and SSE responses, carries
 an assigned `Mcp-Session-Id`, and closes sessionful transports on context exit.
+
+Connector link creation is available only through
+`client.chatgpt.connectors.authentication`; contacts and email endpoints are
+under `client.chatgpt.connectors.external_actions`. The latter can affect an
+external service, so callers must inspect action safety metadata and own user
+confirmation before invoking them. Discovery never authenticates a connector
+or executes an action implicitly.
 
 Remote Control exposes its two roles separately. Server enrollment, pairing,
 WebSocket transport, and environment-scoped clients remain directly under

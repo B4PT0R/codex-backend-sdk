@@ -4,36 +4,47 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- Add a dedicated `client.chatgpt` namespace for official-Desktop conversation,
-  account/session, model, voice, and Sentinel backend surfaces.
-- Cover Desktop projects, file-library and attachment metadata, pins, and share
-  links through explicit `client.chatgpt` resources.
-- Cover Desktop-only Codex usage detail, task-turn logs/actions, cloud
-  environment lifecycle, and GitHub repository discovery resources.
-- Add a typed subscription-backed ChatGPT read-aloud helper with decoded audio
-  bytes and direct MP3 file output.
-- Preserve the original OAuth grant during token refresh instead of narrowing
-  refreshed tokens by omitting the connector read/invoke scopes.
-- Document the broader endpoint inventory extracted from the official Desktop
-  bundle and distinguish it from routes used by `codex-rs`.
-
 ### Added
-- Added a guarded Codex Realtime v3 call helper for OAuth-authenticated
-  `gpt-live-1-codex` and `gpt-live-1-boulder-alpha` sessions, rejecting
-  unrecognized `gpt-live` aliases and snapshots.
-- Added raw helpers for the current Codex account check, token-usage profile,
-  managed config bundle, user settings, workspace messages, and cloud-task
-  creation endpoints.
-- Added the complete Codex Remote Control backend surface: enrollment, token
-  refresh, pairing, paired-client listing/revocation, and protocol-v3 WebSocket
-  envelopes with cursor-aware reconnection.
+- Added a dedicated `client.chatgpt` product namespace covering Desktop
+  conversations, projects, files, search, pins, shares, GPTs, account/session,
+  models, voice, Sentinel, writing blocks, Apps, connectors, and external
+  actions while keeping private schemas raw where appropriate.
+- Added Codex cloud resources for detailed usage, tasks/turns/logs, environments,
+  machines, repositories/branches, profiles, managed preferences, workspace
+  messages, and worktree-snapshot uploads.
+- Added the complete independent-server and account-authorized discovery sides
+  of Remote Control, including enrollment, pairing, client management, and the
+  cursor-aware protocol-v3 WebSocket transport.
+- Added hosted Apps MCP, remote plugin catalogs, installation and workspace
+  sharing contracts, skill detail, and bounded safe materialization of signed
+  plugin, skill, and curated archives.
+- Added the Codex Responses WebSocket transport and structured alpha Web Search
+  commands, both verified live with reusable/continuation behavior.
+- Added browser-callback and device-code Codex OAuth login, explicit remote
+  token revocation, connector-scope-preserving refresh, and optional workspace
+  selection guards.
+- Added guarded Realtime v3 support for the confirmed `gpt-live-1-codex` and
+  `gpt-live-1-boulder-alpha` snapshots, plus typed subscription-backed ChatGPT
+  pronunciation synthesis with in-memory and persisted output forms.
+
+### Changed
+- Grouped surfaces by backend ownership: OpenAI-shaped Codex APIs remain on the
+  top-level client, Codex-specific capabilities live under `client.codex`, and
+  official-Desktop product APIs live under `client.chatgpt`.
+- Preserved the original connector scopes during OAuth refresh instead of
+  accidentally narrowing the grant.
 
 ### Documentation
-- Refreshed the OAuth endpoint inventory from the current Codex and Desktop
-  checkouts, including Realtime v3, remote-control lifecycle, plugins, and the
-  hosted Apps/MCP transport.
-- Distinguished Codex-only `gpt-live` Realtime v3 from the public API-key
-  `gpt-realtime` surface.
+- Reconciled all production networking modules in the current Codex checkout
+  and every concrete HTTP call site in the extracted official Desktop bundle.
+- Added an endpoint coverage matrix with live, contract, and explicit exclusion
+  status; no useful route remains unclassified in the audited snapshot.
+- Documented why commercial/admin, attestation, reporting, telemetry, personal
+  access token, and Desktop device-key enrollment surfaces remain excluded.
+
+### Tests
+- Expanded behavioral and request-contract coverage to 195 tests and recorded
+  read-only live probes separately from stateful or user-interactive contracts.
 
 ## [0.3.10] - 2026-07-17
 

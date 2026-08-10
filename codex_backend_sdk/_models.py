@@ -10,13 +10,31 @@ from pathlib import Path
 from typing import Any, Generic, Literal, Optional, TypeVar
 
 import requests
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 ReasoningEffort = Literal["minimal", "low", "medium", "high", "xhigh"]
 ReasoningSummary = Literal["concise", "detailed", "auto"]
 Verbosity = Literal["low", "medium", "high"]
 ServiceTier = Literal["flex", "priority"]
 ParsedT = TypeVar("ParsedT")
+
+
+class APIObject(dict[str, Any]):
+    """Dictionary with the attribute access used by openai-python models."""
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return self[name]
+        except KeyError:
+            raise AttributeError(name) from None
+
+
+def _api_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return APIObject({key: _api_value(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return [_api_value(item) for item in value]
+    return value
 
 
 class CodexBaseModel(BaseModel):
@@ -94,7 +112,7 @@ class Response(CodexBaseModel):
     metadata: Optional[dict[str, Any]] = None
     model: Optional[str] = None
     object: Literal["response"] = "response"
-    output: list[dict[str, Any]] = Field(default_factory=list)
+    output: list[Any] = Field(default_factory=list)
     parallel_tool_calls: bool = False
     temperature: Optional[float] = None
     tool_choice: Any = "auto"
@@ -118,6 +136,11 @@ class Response(CodexBaseModel):
     truncation: Optional[str] = None
     usage: Optional[ResponseUsage] = Field(default_factory=ResponseUsage)
     user: Optional[str] = None
+
+    @field_validator("output", mode="before")
+    @classmethod
+    def _normalize_output_objects(cls, value: Any) -> Any:
+        return _api_value(value)
 
     @property
     def output_text(self) -> str:
@@ -172,9 +195,23 @@ class ParsedResponse(CodexBaseModel, Generic[ParsedT]):
     def usage(self) -> Optional[ResponseUsage]:
         return self.response.usage
 
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            response = object.__getattribute__(self, "response")
+            return getattr(response, name)
+
 
 class ResponseStreamEvent(CodexBaseModel):
     type: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_nested_objects(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        return {key: _api_value(item) for key, item in value.items()}
 
 
 class Model(CodexBaseModel):
@@ -251,16 +288,25 @@ class ChatGPTSpeech(CodexBaseModel):
         return destination
 
 
-class ImageData(CodexBaseModel):
-    b64_json: str
+class Image(CodexBaseModel):
+    b64_json: Optional[str] = None
+    revised_prompt: Optional[str] = None
+    url: Optional[str] = None
 
 
-class ImageResponse(CodexBaseModel):
+class ImagesResponse(CodexBaseModel):
     created: int
-    data: list[ImageData] = Field(default_factory=list)
+    data: list[Image] = Field(default_factory=list)
     background: Optional[str] = None
+    output_format: Optional[str] = None
     quality: Optional[str] = None
     size: Optional[str] = None
+    usage: Any = None
+
+
+# Backward-compatible names used before the public models were aligned.
+ImageData = Image
+ImageResponse = ImagesResponse
 
 
 class RateLimitResetCredit(CodexBaseModel):
@@ -316,8 +362,13 @@ class UploadedFile(CodexBaseModel):
 class CompactedResponse(CodexBaseModel):
     id: str
     object: str = "response.compacted"
-    output: list[dict[str, Any]] = Field(default_factory=list)
+    output: list[Any] = Field(default_factory=list)
     usage: Optional[ResponseUsage] = Field(default_factory=ResponseUsage)
+
+    @field_validator("output", mode="before")
+    @classmethod
+    def _normalize_output_objects(cls, value: Any) -> Any:
+        return _api_value(value)
 
 
 class BinaryResponseContent:

@@ -28,8 +28,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-openai    = ["openai>=1.0"]
-dev       = ["pytest>=7.0", "openai>=1.0"]
+openai    = [
+    "openai>=2.53.0; python_version >= '3.10'",
+    "openai>=1.0,<2.53.0; python_version < '3.10'",
+]
+dev       = [
+    "pytest>=7.0",
+    "openai>=2.53.0; python_version >= '3.10'",
+    "openai>=1.0,<2.53.0; python_version < '3.10'",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["codex_backend_sdk"]

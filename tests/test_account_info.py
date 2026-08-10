@@ -45,6 +45,34 @@ def test_account_info_when_not_authenticated():
     }
 
 
+def test_client_matches_official_lifecycle_and_copy_helpers():
+    client = CodexClient(
+        store=_store(),
+        timeout=20,
+        default_headers={"x-default": "one"},
+        default_query={"preview": "one"},
+    )
+
+    copied = client.with_options(
+        timeout=30,
+        max_retries=4,
+        default_headers={"x-extra": "two"},
+        default_query={"page": "2"},
+    )
+
+    assert copied._timeout == 30
+    assert copied._max_retries == 4
+    assert copied._session.headers["x-default"] == "one"
+    assert copied._session.headers["x-extra"] == "two"
+    assert copied._session.params == {"preview": "one", "page": "2"}
+    assert copied.authenticated is True
+
+    with client as entered:
+        assert entered is client
+        assert client.is_closed() is False
+    assert client.is_closed() is True
+
+
 
 def test_authenticate_non_interactive_uses_loaded_tokens(monkeypatch):
     monkeypatch.setattr("codex_backend_sdk._client.load_tokens", lambda: _store())

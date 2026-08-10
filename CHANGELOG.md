@@ -26,6 +26,10 @@ All notable changes to this project will be documented in this file.
 - Added guarded Realtime v3 support for the confirmed `gpt-live-1-codex` and
   `gpt-live-1-boulder-alpha` snapshots, plus typed subscription-backed ChatGPT
   pronunciation synthesis with in-memory and persisted output forms.
+- Added optional image-edit masks from URLs, base64 data URLs, or uploaded file
+  IDs, verified against the authenticated Codex backend.
+- Added automated signature drift checks against `openai-python` 2.53.0 and an
+  audited compatibility matrix for every common exposed resource.
 
 ### Changed
 - Grouped surfaces by backend ownership: OpenAI-shaped Codex APIs remain on the
@@ -33,8 +37,19 @@ All notable changes to this project will be documented in this file.
   official-Desktop product APIs live under `client.chatgpt`.
 - Preserved the original connector scopes during OAuth refresh instead of
   accidentally narrowing the grant.
+- Aligned image editing with `openai-python` by exposing the singular `image`
+  parameter while translating it to the Codex backend's `images` array.
+- Forwarded official Responses and Models request options that were previously
+  accepted but ignored, normalized official image file inputs, and made
+  unsupported Files, image-format, streaming, and transcription controls fail
+  explicitly instead of degrading silently.
 
 ### Documentation
+- Reworked the README as a progressive usage guide from Responses and context
+  compaction through Codex cloud and ChatGPT product integrations, with an
+  explicit map of `client`, `client.codex`, and `client.chatgpt` ownership.
+- Added a dedicated API reference covering the complete public resource tree,
+  supported parameters, return shapes, validation, and transport behavior.
 - Reconciled all production networking modules in the current Codex checkout
   and every concrete HTTP call site in the extracted official Desktop bundle.
 - Added an endpoint coverage matrix with live, contract, and explicit exclusion
@@ -43,7 +58,7 @@ All notable changes to this project will be documented in this file.
   access token, and Desktop device-key enrollment surfaces remain excluded.
 
 ### Tests
-- Expanded behavioral and request-contract coverage to 195 tests and recorded
+- Expanded behavioral and request-contract coverage to 221 tests and recorded
   read-only live probes separately from stateful or user-interactive contracts.
 
 ## [0.3.10] - 2026-07-17

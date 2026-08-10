@@ -77,9 +77,11 @@ class AudioTranscriptions:
         model: str,
         chunking_strategy: Any = _UNSET,
         include: Any = _UNSET,
+        keywords: Any = _UNSET,
         known_speaker_names: Any = _UNSET,
         known_speaker_references: Any = _UNSET,
         language: Any = _UNSET,
+        languages: Any = _UNSET,
         prompt: Any = _UNSET,
         response_format: Any = _UNSET,
         stream: Any = _UNSET,
@@ -101,9 +103,11 @@ class AudioTranscriptions:
         unsupported = {
             "chunking_strategy": chunking_strategy,
             "include": include,
+            "keywords": keywords,
             "known_speaker_names": known_speaker_names,
             "known_speaker_references": known_speaker_references,
             "stream": stream,
+            "languages": languages,
             "timestamp_granularities": timestamp_granularities,
         }
         given_unsupported = [

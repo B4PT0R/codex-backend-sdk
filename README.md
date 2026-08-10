@@ -1,22 +1,26 @@
 # codex-backend-sdk
 
-Unofficial Python SDK for the ChatGPT Codex backend API
-(`chatgpt.com/backend-api/codex`).
+Unofficial Python SDK for building independent harnesses and integrations on
+top of the backend capabilities available to an authenticated Codex/ChatGPT
+subscriber.
 
-This package mirrors the official OpenAI Python SDK shape for the API surface
-that the Codex backend exposes. Use `OpenAI`, `client.responses.create(...)`,
-and `client.models.list()` just as you would with `openai-python`, with
-Codex-specific authentication and backend limitations under the hood.
+The package intentionally separates three kinds of API:
+
+| Surface | Purpose | Typical stability |
+| --- | --- | --- |
+| `client.*` | OpenAI-shaped inference and media primitives exposed by Codex | Most familiar and typed |
+| `client.codex.*` | Codex-specific account, cloud, search, and Remote Control capabilities | Product-specific |
+| `client.chatgpt.*` | ChatGPT product surfaces observed in the official Desktop client | Broadest, often raw |
 
 > **Requirements:** a ChatGPT Plus, Pro, or Enterprise subscription.
-> Authentication goes through ChatGPT OAuth and stores tokens in
-> `~/.codex/auth.json`.
+> Authentication uses the official Codex OAuth client and stores compatible
+> credentials in `~/.codex/auth.json`.
 
-> **Disclaimer:** This is an independent, community-maintained library that
-> reverse-engineers undocumented endpoints of `chatgpt.com`. It is not
-> affiliated with, endorsed by, or supported by OpenAI.
+> **Independent project:** this library reverse-engineers undocumented backend
+> contracts. It is not affiliated with, endorsed by, or supported by OpenAI.
+> Availability can vary by plan, workspace, rollout, and backend revision.
 
-## Installation
+## Install
 
 ```bash
 git clone https://github.com/B4PT0R/codex-backend-sdk.git
@@ -24,7 +28,7 @@ cd codex-backend-sdk
 pip install -e .
 ```
 
-## Basic Usage
+## Quickstart
 
 ```python
 from codex_backend_sdk import OpenAI
@@ -37,77 +41,145 @@ response = client.responses.create(
 )
 
 print(response.output_text)
-
-# Remove the locally stored OAuth credentials when you are done.
-client.logout()
 ```
 
-`authenticate()` reuses stored Codex credentials when possible and starts the
-interactive ChatGPT OAuth flow when needed. `logout()` is local and idempotent:
-it clears the shared Codex credential file and unauthenticates the current
-client; it does not revoke the ChatGPT account session remotely. Use
-`client.revoke()` when remote OAuth revocation is intended; the local copy is
-cleared only after the authorization server accepts the request.
+`authenticate()` reuses existing Codex credentials when possible and otherwise
+opens the browser OAuth flow. Most examples below assume an authenticated
+`client` created this way.
 
-Headless and remote harnesses can use Codex's official device-code flow without
-opening a local callback listener:
+## Choose the right surface
+
+### Direct client: inference and reusable primitives
+
+Start here for the common building blocks of an agent or application:
 
 ```python
-client = OpenAI().authenticate_device_code(
-    on_code=lambda code: print(code.verification_url, code.user_code),
-    allowed_workspace_ids=["optional-workspace-id"],
-)
+client.responses       # text/reasoning/tool inference, parsing, compaction
+client.models          # Codex model catalog
+client.files           # upload files for Apps/MCP parameters
+client.images          # Codex-backed image generation and editing
+client.audio           # ChatGPT-backed transcription
+client.embeddings      # OpenAI embeddings endpoint through OAuth
+client.realtime        # WebRTC call creation and Realtime connection headers
 ```
 
-The callback receives a short-lived `DeviceCode` that the user must approve in
-a browser. The SDK polls for completion, performs the PKCE token exchange, and
-persists the resulting Codex credentials by default. `allowed_workspace_ids`
-can restrict which ChatGPT workspace may be selected before anything is saved.
+These resources follow `openai-python` conventions where the backend overlaps
+with the public OpenAI API. Backend-specific restrictions remain explicit.
+See the [compatibility matrix](docs/openai-compatibility.md) for the audited
+signatures, transport adaptations, and intrinsic OAuth/backend boundaries.
 
-## Streaming
+### `client.codex`: Codex product capabilities
+
+Use this namespace for capabilities owned by Codex rather than the general
+Responses API:
+
+```python
+client.codex.web_search          # structured search/page/weather/etc. commands
+client.codex.usage               # quota plus detailed usage
+client.codex.tasks               # Codex cloud tasks and turns
+client.codex.environments        # cloud environments and machines
+client.codex.repositories        # repository and branch discovery
+client.codex.remote_control      # Remote Control server and host discovery
+client.codex.config              # managed Codex settings/configuration
+client.codex.profile             # Codex profile
+client.codex.memories            # account memories and trace summarization
+client.codex.worktree_snapshots  # cloud-task archive uploads
+```
+
+### `client.chatgpt`: Desktop-observed product APIs
+
+Use this namespace when an integration needs ChatGPT product state or hosted
+Apps rather than Codex inference:
+
+```python
+client.chatgpt.conversations  # ChatGPT history and streaming conversation API
+client.chatgpt.projects       # projects, files, saves, connector scopes
+client.chatgpt.files          # file library, attachments, downloads, processing
+client.chatgpt.search         # cross-product indexed search
+client.chatgpt.apps           # hosted Apps/MCP transports and widgets
+client.chatgpt.plugins        # plugin catalogs, skills, bundles, sharing
+client.chatgpt.connectors     # connector discovery, linking, external actions
+client.chatgpt.models         # ChatGPT and third-party model catalogs
+client.chatgpt.voice          # voices, dictation metadata, read-aloud speech
+client.chatgpt.account        # account metadata and explicit preferences
+```
+
+These private product schemas evolve more often. The SDK therefore returns raw
+dictionaries or raw streams when imposing a stable model would be misleading.
+
+## Common workflows
+
+### Generate a response
+
+```python
+response = client.responses.create(
+    model="gpt-5.4",
+    instructions="Be concise.",
+    input="Summarize the CAP theorem.",
+    reasoning={"effort": "medium", "summary": "auto"},
+)
+
+print(response.output_text)
+print(response.reasoning_summary)
+```
+
+The backend always streams internally. Without `stream=True`, the SDK collects
+events and returns a typed `Response`.
+
+### Stream output
 
 ```python
 stream = client.responses.create(
-    model="gpt-5.4",
-    input="Say 'hi' five times.",
+    input="Write a short limerick about Linux.",
     stream=True,
 )
 
 for event in stream:
-    if event.type in {"response.output_text.delta", "response.content_part.delta"}:
-        delta = event.delta
-        print(delta if isinstance(delta, str) else delta.get("text", ""), end="")
+    if event.type == "response.output_text.delta":
+        print(event.delta, end="", flush=True)
 ```
 
-## Models
+For long-lived integrations, the alternate WebSocket transport keeps one
+connection reusable across sequential turns:
 
 ```python
-models = client.models.list()
-for model in models:
-    print(model.id, model.display_name, model.context_window)
-
-info = client.models.retrieve("gpt-5.4")
+with client.responses.websocket.connect() as ws:
+    for event in ws.create({"model": "gpt-5.4", "input": "Say hello."}):
+        if event.get("type") == "response.output_text.delta":
+            print(event.get("delta", ""), end="")
 ```
 
-## Multi-Turn Input
+### Maintain a multi-turn conversation
 
-The Codex backend does not expose `previous_response_id`, so pass prior
-input/output items explicitly.
+The Codex backend does not expose `previous_response_id`; preserve prior items
+in the next request:
 
 ```python
-history = [
-    {"role": "user", "content": "My name is Alice. Say OK."},
-]
+history = [{"role": "user", "content": "My name is Alice. Say OK."}]
 
-reply1 = client.responses.create(input=history).output_text
-history.append({"role": "assistant", "content": reply1})
+first = client.responses.create(input=history)
+history.extend(first.output)
 history.append({"role": "user", "content": "What is my name?"})
 
-reply2 = client.responses.create(input=history).output_text
-print(reply2)
+print(client.responses.create(input=history).output_text)
 ```
 
-## Function Calling
+### Compact a long context
+
+```python
+compacted = client.responses.compact(
+    model="gpt-5.4",
+    instructions="Preserve task-critical decisions and unresolved work.",
+    input=history,
+)
+
+history = compacted.output
+```
+
+Compaction summaries are opaque encrypted backend state. Replay them as input;
+do not parse or modify their contents.
+
+### Call a function
 
 ```python
 import json
@@ -125,12 +197,10 @@ tools = [{
 }]
 
 first = client.responses.create(
-    input="What's the weather in Paris?",
+    input="What is the weather in Paris?",
     tools=tools,
 )
-
-call = next(item for item in first.output if item["type"] == "function_call")
-result = {"temperature": 18, "unit": "celsius", "condition": "cloudy"}
+call = first.tool_calls[0]
 
 second = client.responses.create(
     input=[
@@ -138,587 +208,132 @@ second = client.responses.create(
         {
             "type": "function_call_output",
             "call_id": call["call_id"],
-            "output": json.dumps(result),
+            "output": json.dumps({"temperature": 18, "unit": "celsius"}),
         },
     ],
     tools=tools,
 )
-
 print(second.output_text)
 ```
 
-## Structured Output
-
-```python
-schema = {
-    "title": "person",
-    "type": "object",
-    "properties": {
-        "name": {"type": "string"},
-        "age": {"type": "integer"},
-    },
-    "required": ["name", "age"],
-    "additionalProperties": False,
-}
-
-response = client.responses.create(
-    input="Extract: Bob is 42 years old.",
-    text={
-        "format": {
-            "type": "json_schema",
-            "name": "person",
-            "schema": schema,
-            "strict": True,
-        }
-    },
-)
-```
-
-## Supported Backend Endpoints
-
-The SDK exposes the supported backend endpoints through OpenAI-shaped resources
-(`responses`, `models`, `realtime`), Codex-only resources (`codex`), and a
-separate `chatgpt` namespace for product APIs observed specifically in the
-official Desktop app.
-
-| Backend endpoint | SDK method | Notes |
-|---|---|---|
-| `POST https://auth.openai.com/api/accounts/deviceauth/usercode` | `client.authenticate_device_code(...)` / `request_device_code()` | Starts Codex's browser-assisted device login for headless or remote harnesses. |
-| `POST https://auth.openai.com/api/accounts/deviceauth/token` + `POST /oauth/token` | `complete_device_code_login(...)` | Polls the pending authorization and exchanges its PKCE code for the ordinary Codex OAuth token set. |
-| `POST https://auth.openai.com/oauth/revoke` | `client.revoke()` / `revoke_oauth_token(...)` | Explicit remote revocation; prefers the refresh token and clears local credentials after success. |
-| `POST /backend-api/codex/responses` | `client.responses.create(...)` | Stream-only backend; non-streaming SDK calls are collected from SSE events. |
-| `WSS /backend-api/codex/responses` | `client.responses.websocket.connect()` | Reusable sequential `response.create` transport with raw forward-compatible events, handshake metadata and structured error envelopes. |
-| `POST /backend-api/codex/responses/compact` | `client.responses.compact(...)` | Codex-specific helper for encrypted context compaction. |
-| `POST /backend-api/codex/memories/trace_summarize` | `client.codex.memories.trace_summarize(...)` | Raw Codex memory trace summarization helper. |
-| `GET /backend-api/codex/models` | `client.models.list()` / `client.models.retrieve(...)` | OpenAI-shaped model objects with Codex metadata preserved as extra fields. |
-| `POST /backend-api/codex/realtime/calls` | `client.realtime.calls.create(...)` / `create_v3(...)` | OAuth-authenticated SDP call creation. Realtime v3 accepts the confirmed Codex snapshots `gpt-live-1-codex` and `gpt-live-1-boulder-alpha`. |
-| `POST /backend-api/codex/alpha/search` | `client.codex.web_search.search(...)` | Structured Web Search commands used by Codex, including search, page operations, images, finance, weather, sports and time. |
-| `wss://api.openai.com/v1/realtime?model=...` | `client.realtime_websocket_url(...)` / `client.realtime.websocket_headers(...)` | Voice v2 helpers; requires a Realtime API key obtained during OAuth or supplied by the auth store. |
-| `POST /v1/embeddings` | `client.embeddings.create(...)` | Uses the Codex OAuth access token against `api.openai.com`; usage is charged to the associated OpenAI Platform organization. |
-| `POST /backend-api/transcribe` | `client.audio.transcriptions.create(...)` | Uses the authenticated ChatGPT backend for non-streaming batch transcription; no developer API key is required. |
-| `POST /backend-api/codex/images/generations` | `client.images.generate(...)` | Generates images through the authenticated Codex backend and returns typed base64 image data. |
-| `POST /backend-api/codex/images/edits` | `client.images.edit(...)` | Edits one or more URL/data-URL images through the authenticated Codex backend. |
-| `GET /backend-api/codex/rate-limit-reset-credits` | `client.codex.rate_limit_reset_credits.list()` | Lists detailed reset credits available to the authenticated account. |
-| `POST /backend-api/codex/rate-limit-reset-credits/consume` | `client.codex.rate_limit_reset_credits.consume(...)` | Consumes a reset credit using an idempotent redemption request ID. |
-| `GET /backend-api/wham/usage` | `client.codex.usage()` | Codex/ChatGPT quota and rate-limit status. |
-| `GET /backend-api/wham/config/requirements` | `client.codex.config.requirements()` | Raw managed requirements/config payload for the authenticated account. |
-| `GET /backend-api/wham/config/bundle` | `client.codex.config.bundle()` | Selected cloud-managed Codex configuration bundle. |
-| `GET /backend-api/wham/settings/user` | `client.codex.config.user_settings()` | Authenticated Codex user settings. |
-| `GET /backend-api/wham/settings/configs/user-preferences` | `client.codex.config.user_preferences_config()` | Managed limits and special values for cloud preference editors. |
-| `PATCH /backend-api/wham/settings/user` | `client.codex.config.update_user_settings(...)` | Explicit cloud preference mutation using the official raw payload. |
-| `GET /backend-api/wham/accounts/check` | `client.codex.accounts.check()` | Account availability and entitlement check. |
-| `GET/PATCH /backend-api/wham/profiles/me` | `client.codex.profile` | Token-usage profile plus explicit display-name, username, and profile-asset mutations. |
-| `POST /backend-api/wham/profiles/me/photo` | `client.codex.profile.upload_photo(...)` / `set_photo(...)` | Multipart image upload returning the asset pointer expected by profile updates. |
-| `GET /backend-api/wham/workspace-messages` | `client.codex.workspace_messages.list()` | Workspace-scoped backend messages. |
-| `POST /backend-api/wham/tasks` | `client.codex.tasks.create(...)` | Creates a Codex cloud task from a raw evolving backend payload. |
-| `POST /backend-api/wham/worktree_snapshots/...` | `client.codex.worktree_snapshots` | Uploads a caller-prepared worktree archive through signed storage and finalizes it for cloud-task use. |
-| `POST /backend-api/wham/remote/control/server/enroll` | `client.codex.remote_control.enroll(...)` | Enrolls a Codex-compatible Remote Control server. |
-| `POST /backend-api/wham/remote/control/server/refresh` | `client.codex.remote_control.refresh(...)` | Renews its short-lived Remote Control token. |
-| `WSS /backend-api/wham/remote/control/server` | `client.codex.remote_control.connect(...)` | Opens the protocol-v3 envelope transport with cursor resume. |
-| `GET /backend-api/wham/tasks/list` | `client.codex.tasks.list(...)` | Raw Codex cloud task listing. |
-| `GET /backend-api/wham/tasks/{task_id}` | `client.codex.tasks.retrieve(task_id)` | Raw Codex cloud task detail. |
-| `GET /backend-api/wham/tasks/{task_id}/turns` | `client.codex.tasks.turns.list(task_id)` | Raw task turn mapping. |
-| `GET /backend-api/wham/tasks/{task_id}/turns/{turn_id}/sibling_turns` | `client.codex.tasks.turns.sibling_turns(task_id, turn_id)` | Raw sibling turn list. |
-| `GET /backend-api/wham/environments` | `client.codex.environments.list()` | Raw Codex cloud environment list. |
-| `POST /backend-api/files` + signed upload | `client.files.upload(...)` | Uploads local files for Codex Apps/MCP file parameters and returns `sediment://...` metadata. |
-| `GET /backend-api/memories` | `client.codex.memories.list()` | Raw ChatGPT memory payload for the authenticated account. |
-| `GET /backend-api/user_system_messages` | `client.codex.user_system_messages.retrieve()` | Raw ChatGPT customization/system-message payload. |
-| `GET /backend-api/wham/remote/control/{mfa_requirement,clients}` | `client.codex.remote_control.desktop` | Desktop/browser-client MFA readiness and paired-client discovery. |
-| `GET /backend-api/codex/remote/control/environments` | `client.codex.remote_control.desktop.environments` | Remote host discovery, with explicit rename/delete mutations. |
-| `GET /backend-api/global/search` | `client.chatgpt.search.global_search(...)` | Cross-product search with source status and pagination metadata. |
-| `POST /backend-api/files/process_upload_stream` | `client.chatgpt.files.process_upload_events(...)` | NDJSON upload-processing event stream. |
-| `GET /backend-api/celsius/ws/user` | `client.chatgpt.conversations.websocket_url()` | User-scoped ChatGPT conversation continuation WebSocket URL. |
-| `GET /backend-api/tpp/models/` | `client.chatgpt.models.third_party()` | Third-party-provider model catalog available to the account. |
-| `GET /backend-api/gizmos/{id}` | `client.chatgpt.gizmos.retrieve(...)` | Generic custom-GPT metadata; projects remain a specialized resource. |
-| `POST /backend-api/wham/apps` | `client.chatgpt.apps.list_tools()` / `call_tool(...)` / `request(...)` | Hosted Apps/MCP JSON-RPC transport observed in Desktop. |
-| `/backend-api/ecosystem/...` | `client.chatgpt.apps` | Widget, launcher, MCP, and URL-safety helpers; install and launch operations remain explicit mutations. |
-| `POST /backend-api/ps/mcp` | `client.chatgpt.apps.connect_hosted_mcp()` | MCP Streamable HTTP connection with initialization, sessions, JSON/SSE responses, tools, and resources. |
-| `GET /backend-api/plugins/...` | `client.chatgpt.plugins` | Featured plugin IDs and curated export metadata used by Codex. |
-| `GET /backend-api/ps/plugins/{list,search,installed,suggested,...}` | `client.chatgpt.plugins` | Current Codex remote-plugin catalogs, detail, search, installed state, suggestions, and workspace sharing discovery. |
-| `POST /backend-api/ps/plugins/{id}/{install,uninstall}` | `client.chatgpt.plugins.installation` | Explicit remote-plugin installation mutations with response-state validation. |
-| `/backend-api/{public,ps}/plugins/workspace/...` | `client.chatgpt.plugins.shares` | Workspace plugin archive publication, created-plugin discovery, access targets, and deletion. |
-| Backend-issued curated/plugin/skill bundle URLs | `client.chatgpt.plugins.bundles` | HTTPS-only bounded downloads plus safe atomic curated/plugin extraction; OAuth is never forwarded to signed URLs. |
-| `GET /backend-api/connectors/directory/...` | `client.chatgpt.connectors.directory` | Public/workspace connector catalogs with validated pagination. |
-| `/backend-api/aip/connectors/...` | `client.chatgpt.connectors` | Connector metadata, terms, logos, accessible links, and explicitly separated link-auth mutations. |
-| `GET /backend-api/aip/connectors/product_specific` | `client.chatgpt.connectors.product_specific(...)` | Product-purpose connector selection used by Desktop cloud environments. |
-| `POST /backend-api/ps/apps/batch` | `client.chatgpt.connectors.batch_metadata(...)` | Batched app metadata and optional tool schemas. |
-| `POST /backend-api/conversation/message/writing-blocks[/magic-edit]` | `client.chatgpt.writing_blocks` | Persists writing blocks and requests model-assisted Markdown replacements. |
-
-Desktop-observed ChatGPT surfaces are deliberately separate from the Codex
-protocol:
-
-```python
-# ChatGPT history, not Codex App Server threads
-page = client.chatgpt.conversations.list(limit=20)
-conversation = client.chatgpt.conversations.retrieve("conv_...")
-
-# ChatGPT product model and voice metadata
-chatgpt_models = client.chatgpt.models.list()
-voices = client.chatgpt.voice.voices()
-
-# Hosted ChatGPT Apps/MCP discovery and invocation
-tools = client.chatgpt.apps.list_tools()
-result = client.chatgpt.apps.call_tool("connector_tool_name", {"query": "..."})
-
-# Full MCP Streamable HTTP protocol, including resources and session cleanup
-with client.chatgpt.apps.connect_hosted_mcp() as mcp:
-    hosted_tools = mcp.list_tools()["tools"]
-    resources = mcp.list_resources()["resources"]
-
-featured = client.chatgpt.plugins.featured(platform="codex")
-curated_export = client.chatgpt.plugins.curated_export()
-remote_plugins = client.chatgpt.plugins.list_all(scope="GLOBAL")
-installed_plugins = client.chatgpt.plugins.installed_all()
-search_page = client.chatgpt.plugins.search("issue tracking", limit=10)
-skill_markdown = client.chatgpt.plugins.skill("plugins~...", "skill-name")
-my_shared_plugins = client.chatgpt.plugins.shares.created_all()
-
-# Download in memory, to BytesIO/a file, or safely extract a complete plugin.
-bundle = client.chatgpt.plugins.bundles.download_plugin("plugins~...")
-checkout = client.chatgpt.plugins.bundles.extract_plugin(
-    "plugins~...", "./plugins/example"
-)
-
-# Connector discovery is read-only; authentication and external actions live
-# in separate, explicitly named authority namespaces.
-connectors = client.chatgpt.connectors.directory.list_all()
-cloud_connectors = client.chatgpt.connectors.product_specific("hermes")
-detail = client.chatgpt.connectors.retrieve(
-    connectors[0]["id"], include_actions=True
-)
-links = client.chatgpt.connectors.links.list_accessible()
-
-# Persist a Desktop-compatible writing block, or request replacement choices
-# for an explicitly marked Markdown range.
-choices = client.chatgpt.writing_blocks.magic_edit(
-    conversation_id="conv_...",
-    full_block_body_markdown="Hello world",
-    start_index=6,
-    end_index=11,
-    marked_block_body_markdown="Hello ⟦MAGICSTART⟧world⟦MAGICEND⟧",
-    instruction="Make this warmer",
-)
-```
-
-Hosted tools can mutate connected external services. Independent harnesses
-must inspect tool annotations and own their user-confirmation policy before
-calling them; the SDK does not silently invoke or auto-install anything.
-`connect_hosted_mcp()` follows Codex's protocol version `2025-06-18`, sends the
-required `X-OpenAI-Product-Sku` header, accepts JSON and SSE responses, carries
-an assigned `Mcp-Session-Id`, and closes sessionful transports on context exit.
-
-Connector link creation is available only through
-`client.chatgpt.connectors.authentication`; contacts and email endpoints are
-under `client.chatgpt.connectors.external_actions`. The latter can affect an
-external service, so callers must inspect action safety metadata and own user
-confirmation before invoking them. Discovery never authenticates a connector
-or executes an action implicitly.
-
-`external_actions.upload_google_drive_file(...)` reproduces Desktop's native
-multipart conversion flow for `.docx`, `.pptx`, and `.xlsx` files. It requires
-an already linked Google Drive connector and raises
-`ConnectorAuthenticationRequiredError` when the backend reports that linking
-is required; it never starts OAuth on the caller's behalf.
-
-Remote Control exposes its two roles separately. Server enrollment, pairing,
-WebSocket transport, and environment-scoped clients remain directly under
-`client.codex.remote_control`; account-authorized Desktop/browser clients and
-remote-host discovery live under `client.codex.remote_control.desktop`:
-
-```python
-desktop = client.codex.remote_control.desktop
-requirement = desktop.mfa_requirement()
-browser_clients = desktop.clients.list_all(include_pending=False)
-remote_hosts = desktop.environments.list_all()
-```
-
-Pairing/revoking browser clients and renaming/deleting remote hosts are explicit
-methods and are never performed by discovery calls.
-
-Global ChatGPT search remains distinct from conversation-title search:
-
-```python
-matches = client.chatgpt.search.global_search(
-    "release notes",
-    sources=("conversation",),
-    limit=20,
-)
-```
-
-File download helpers follow backend-issued links and can return `bytes`, a
-`BytesIO`, a persisted `Path`, or the raw HTTP response. OAuth headers are kept
-for ChatGPT backend links and deliberately omitted from signed external CDN
-requests:
-
-```python
-content = client.chatgpt.files.download("file_...")
-buffer = client.chatgpt.files.download_attachment(
-    "conversation_...", "file_...", response_format="bytes_io"
-)
-events = list(client.chatgpt.files.process_upload_events({"file_id": "file_..."}))
-```
-
-Projects and generic custom GPTs are separate concepts even though both use
-ChatGPT's gizmo storage:
-
-```python
-projects = client.chatgpt.projects.list_all()
-gizmo = client.chatgpt.gizmos.retrieve("g-...")
-subagent_turns = client.chatgpt.conversations.subagent_thread_turns(
-    "conversation_...", "thread_..."
-)
-conversation_websocket = client.chatgpt.conversations.websocket_url()
-```
-
-Model helpers expose the regular and TPP catalogs, system hints, custom-agent
-hints, and optional internal slugs. `models.slugs()` returns `None` when that
-optional Desktop route is unavailable instead of turning its expected 404 into
-a hard failure. Account preference writes (`set_voice`, ultra effort, trusted
-contact opt-out) are explicit mutation methods.
-
-`client.chatgpt.conversations` exposes explicit history, search, batch, CRUD,
-branch, prepare, streaming-create/resume, and attachment-list operations.
-`client.chatgpt.projects`, `.files`, `.pins`, and `.shares` cover persisted
-Desktop content and its explicit mutations. `client.chatgpt.account`, `.models`,
-`.voice`, and `.sentinel` expose the other verified Desktop session surfaces.
-Responses remain raw dictionaries (or raw streaming HTTP responses) because
-these undocumented schemas can evolve. See
-[`docs/desktop-endpoint-inventory.md`](docs/desktop-endpoint-inventory.md) for
-the audited source snapshot and
-[`docs/endpoint-coverage.md`](docs/endpoint-coverage.md) for the implementation
-and live-probe status of each family.
-
-### Responses
-
-`client.responses.create(...)` follows the official OpenAI Responses API where
-the Codex backend overlaps with it.
-
-Supported request fields:
-
-- `model`
-- `input`
-- `instructions`
-- `include`
-- `parallel_tool_calls`
-- `prompt_cache_key`
-- `reasoning`
-- `service_tier`
-- `store=False`
-- `stream`
-- `text`
-- `tool_choice`
-- `tools`
-
-The backend itself requires streaming. When `stream=True`, the SDK yields
-`ResponseStreamEvent` objects directly. When `stream` is omitted or false, the
-SDK consumes the SSE stream and returns a collected `Response`.
-
-```python
-response = client.responses.create(
-    model="gpt-5.4",
-    instructions="Be concise.",
-    input=[
-        {"role": "user", "content": "Summarize this API shape."},
-    ],
-    reasoning={"effort": "medium", "summary": "auto"},
-    include=["reasoning.encrypted_content"],
-    text={"verbosity": "medium"},
-    prompt_cache_key="session-123",
-)
-```
-
-For structured output, `client.responses.parse(...)` accepts a Pydantic model,
-sends it as a strict JSON schema, and returns `ParsedResponse`:
+### Parse structured output
 
 ```python
 from pydantic import BaseModel
-
 
 class Person(BaseModel):
     name: str
     age: int
 
-
-parsed = client.responses.parse(
-    model="gpt-5.4",
+result = client.responses.parse(
     input="Extract: Ada is 37 years old.",
     text_format=Person,
 )
-print(parsed.output_parsed.name)
+
+print(result.output_parsed)
 ```
 
-Collected responses expose convenience properties for common output items:
-`response.output_text`, `response.reasoning_summary`, and
-`response.tool_calls`.
-
-Unsupported official Responses parameters are rejected explicitly with
-`CodexBackendUnsupportedParameterError`, including `temperature`, `top_p`,
-`max_output_tokens`, `metadata`, `user`, `safety_identifier`, `truncation`,
-`previous_response_id`, `conversation`, `background`, `prompt`,
-`prompt_cache_retention`, and `stream_options`.
-
-### Context Compaction
-
-`client.responses.compact(...)` is specific to the Codex backend. It compresses
-a long Responses-style input list into an opaque encrypted compaction summary
-that can be replayed in later `input` arrays.
+### Discover available models
 
 ```python
-compacted = client.responses.compact(
-    model="gpt-5.4",
-    instructions="Keep task-critical context.",
-    input=history,
-)
+for model in client.models.list():
+    print(model.id, model.context_window, model.supported_reasoning_levels)
 
-history = compacted.output
+model = client.models.retrieve("gpt-5.4")
 ```
 
-The returned `CompactedResponse.output` contains regular response items plus
-one or more `{"type": "compaction_summary", ...}` items. Treat those summaries
-as opaque backend state.
-
-### Models
-
-`client.models.list()` and `client.models.retrieve(model)` mirror the official
-OpenAI models resource, while preserving Codex-specific metadata as extra
-Pydantic fields. The returned page also exposes the backend `ETag` when present.
+### Upload a file
 
 ```python
-models = client.models.list()
-print(models.etag)
-for model in models:
-    print(
-        model.id,
-        model.context_window,
-        model.supported_in_api,
-        model.supports_reasoning_summaries,
-    )
+uploaded = client.files.upload("report.csv")
+print(uploaded.uri)  # sediment://file_...
 ```
 
-Common extra fields include:
+The helper creates ChatGPT file metadata, uploads to the backend-issued signed
+URL, and finalizes the file for Apps/MCP file parameters.
 
-- `display_name`
-- `description`
-- `context_window`
-- `supported_in_api`
-- `supports_reasoning_summaries`
-- `support_verbosity`
-- `default_verbosity`
-- `default_reasoning_level`
-- `supported_reasoning_levels`
-- `auto_compact_token_limit`
-- `prefer_websockets`
-- `input_modalities`
-- `available_in_plans`
-- `base_instructions`
-- `priority`
-- `raw`
-
-### Realtime
-
-The SDK keeps the realtime surface available for integrations that bridge Codex
-auth with voice sessions.
-
-`client.realtime.calls.create(...)` mirrors the SDP call shape. For the current
-Codex Realtime v3 protocol, use `create_v3(...)` with the Codex-specific model:
-
-```python
-answer = client.realtime.calls.create_v3(
-    sdp=offer_sdp,
-    session={
-        "model": "gpt-live-1-codex",
-        "instructions": "Speak naturally and stay concise.",
-    },
-)
-
-print(answer.text)
-```
-
-Live ChatGPT OAuth probes validated both `gpt-live-1-codex` and
-`gpt-live-1-boulder-alpha`. The bare `gpt-live` alias, `gpt-live-1`,
-`gpt-live-latest`, and an unknown suffix were rejected by the backend, so the
-SDK allows only the two confirmed identifiers. These models are not
-interchangeable with the public `gpt-realtime` family documented for developer
-API-key Realtime sessions.
-
-For WebSocket-based plugins such as `codex-agent`, the client also exposes the
-Voice v2 connection details:
-
-```python
-url = client.realtime_websocket_url(model="gpt-realtime-1.5")
-headers = client.realtime.websocket_headers(session_id="voice-session")
-```
-
-During interactive ChatGPT OAuth login, the SDK exchanges the fresh ID token for
-the temporary API key required by Realtime and stores it with the other local
-credentials. Existing credentials created by older SDK versions may require one
-forced interactive login before these headers are available.
-
-For non-interactive checks, you can avoid triggering a browser login flow:
-
-```python
-client = OpenAI().authenticate(interactive=False)
-print(client.authenticated)
-print(client.account_info())
-```
-
-### Embeddings
-
-`client.embeddings.create(...)` mirrors the official OpenAI embeddings resource
-and sends the Codex OAuth access token directly to `api.openai.com/v1`.
-
-```python
-embedding = client.embeddings.create(
-    model="text-embedding-3-small",
-    input="Embed this sentence.",
-    dimensions=256,
-)
-
-print(embedding.data[0].embedding)
-```
-
-### Audio Transcriptions
-
-`client.audio.transcriptions.create(...)` mirrors the official OpenAI
-transcriptions resource for non-streaming calls.
+### Transcribe audio
 
 ```python
 with open("meeting.wav", "rb") as audio:
-    transcription = client.audio.transcriptions.create(
+    transcript = client.audio.transcriptions.create(
         model="gpt-4o-mini-transcribe",
         file=("meeting.wav", audio, "audio/wav"),
-        response_format="json",
     )
 
-print(transcription.text)
+print(transcript.text)
 ```
 
-### ChatGPT Read-Aloud Speech
-
-The official Desktop app exposes a smaller subscription-backed read-aloud
-service. It accepts text, a pronunciation language, and playback speed, but
-does not expose the voice and model controls of the public OpenAI speech API.
+### Generate or edit an image
 
 ```python
-speech = client.chatgpt.voice.synthesize_pronunciation(
-    text="Bonjour Baptiste",
-    pronunciation_language="fr-FR",
-)
+import base64
 
-speech.write_to_file("bonjour.mp3")
-# `speech.content` also provides the decoded bytes directly.
-
-data_uri = client.chatgpt.voice.synthesize_pronunciation(
-    text="Bonjour Baptiste",
-    pronunciation_language="fr-FR",
-    response_format="data_uri",
-)
-
-buffer = client.chatgpt.voice.synthesize_pronunciation(
-    text="Bonjour Baptiste",
-    pronunciation_language="fr-FR",
-    response_format="bytes_io",
-)
-
-path = client.chatgpt.voice.synthesize_pronunciation(
-    text="Bonjour Baptiste",
-    pronunciation_language="fr-FR",
-    response_format="file",
-    output_path="bonjour.mp3",
-)
-```
-
-This uses `POST /backend-api/pronunciation/synthesize?format=mp3` with ChatGPT
-OAuth. The default `speech` format returns `ChatGPTSpeech` without touching the
-filesystem; `data_uri`, `bytes_io`, and explicit `file` outputs are also
-available. Availability follows the authenticated ChatGPT subscription and may
-change independently of the public API.
-
-### Image Generation
-
-`client.images.generate(...)` uses the ChatGPT-authenticated Codex image backend,
-not the separately billed OpenAI Platform image endpoint.
-
-```python
 image = client.images.generate(
-    prompt="A cheerful blue robot holding a red flower",
     model="gpt-image-2",
-    quality="auto",
-    size="auto",
+    prompt="A cheerful blue robot holding a red flower",
 )
 
 with open("robot.png", "wb") as output:
     output.write(base64.b64decode(image.data[0].b64_json))
-```
 
-The Codex contract supports `prompt`, `model`, `background`, `n`, `quality`,
-and `size`. Editing accepts one or more ordinary URLs or data URLs:
-
-```python
 edited = client.images.edit(
-    images=["data:image/png;base64,..."],
+    image=open("robot.png", "rb"),
+    mask=open("mask.png", "rb"),
     prompt="Add a small red star in the center",
-    quality="low",
 )
 ```
 
-### Quota And Usage
+## Codex workflows
 
-`client.codex.usage()` calls the ChatGPT WHAM usage endpoint. It returns the raw
-quota payload from the backend because the shape contains plan-specific fields.
+### Structured web search
+
+```python
+result = client.codex.web_search.search(
+    id="search-session-1",
+    model="gpt-5-search-api",
+    commands={
+        "search_query": [{"q": "Python packaging PEP 735"}],
+        "response_length": "short",
+    },
+)
+
+print(result["output"])
+continuation = result.get("encrypted_output")
+```
+
+The same transport supports page operations, image search, finance, weather,
+sports, and time commands. See the API reference for command validation.
+
+### Inspect quota and detailed usage
 
 ```python
 quota = client.codex.usage()
-primary = quota.get("rate_limit", {}).get("primary_window", {})
-print(primary.get("used_percent"))
+daily = client.codex.usage_details.daily_token_breakdown()
+credits = client.codex.usage_details.credit_events()
+
+print(quota.get("rate_limit", {}).get("primary_window"))
 ```
 
-Typical fields include:
-
-- `plan_type`
-- `rate_limit.allowed`
-- `rate_limit.limit_reached`
-- `rate_limit.primary_window`
-- `rate_limit.secondary_window`
-- `additional_rate_limits`
-- `credits`
-- `rate_limit_reached_type`
-
-Detailed reset credits are available separately:
-
-```python
-credits = client.codex.rate_limit_reset_credits.list()
-for credit in credits.credits:
-    print(credit.id, credit.title, credit.expires_at)
-
-# Consuming a credit is an account mutation. Use a unique idempotency key.
-result = client.codex.rate_limit_reset_credits.consume(
-    redeem_request_id=str(uuid.uuid4()),
-    credit_id=credits.credits[0].id,
-)
-```
-
-### Codex Cloud Tasks
-
-The `client.codex.tasks` and `client.codex.environments` namespaces expose WHAM
-cloud-task payloads as raw backend dictionaries.
+### Work with Codex cloud tasks
 
 ```python
 tasks = client.codex.tasks.list(limit=10)
 task = client.codex.tasks.retrieve(tasks["items"][0]["id"])
 turns = client.codex.tasks.turns.list(task["task"]["id"])
+logs = client.codex.tasks.turns.logs(task["task"]["id"], turns[0]["id"])
+
 environments = client.codex.environments.list()
-created = client.codex.tasks.create({"prompt": "Fix the failing checks", "environment_id": "env_1"})
+repositories = client.codex.repositories.search(
+    "codex",
+    connector_id="github-connector-id",
+)
 ```
 
-Supported task-list filters are `limit`, `cursor`, `task_filter`, and
-`environment_id`.
+Creation, cancellation, environment updates, cache resets, and pull-request
+operations are explicit mutations; discovery methods never invoke them.
 
-### Remote Control
-
-`client.codex.remote_control` implements the server side used by Codex App
-Server: OAuth enrollment, token refresh, pairing, paired-client management, and
-the protocol-v3 WebSocket transport.
+### Run a Remote Control server
 
 ```python
 server = client.codex.remote_control.enroll(
@@ -737,80 +352,219 @@ with client.codex.remote_control.connect(
     installation_id="stable-installation-id",
     server_name="My workstation",
 ) as connection:
-    for client_envelope in connection:
-        print(client_envelope)
+    for envelope in connection:
+        print(envelope)
 ```
 
-The WebSocket deliberately exposes raw Codex envelope dictionaries. Callers
-implementing an App Server bridge must preserve `client_id`, `stream_id`,
-`seq_id`, chunk, ACK, and cursor semantics. `reconnect(connection)` refreshes an
-expiring token and resumes from the latest cursor observed by the connection.
-Tokens and pairing codes are secrets and must not be logged.
+The transport deliberately leaves protocol-v3 envelopes raw. A bridge must
+preserve client, stream, sequence, ACK, chunk, and cursor semantics. Never log
+pairing codes or Remote Control tokens.
 
-### ChatGPT Account Data
+## ChatGPT product workflows
 
-The `client.codex` namespace also exposes read-only ChatGPT account data that is
-not part of the official OpenAI SDK.
+### Search and retrieve ChatGPT history
 
 ```python
-memories = client.codex.memories.list()
-customization = client.codex.user_system_messages.retrieve()
-requirements = client.codex.config.requirements()
-bundle = client.codex.config.bundle()
-settings = client.codex.config.user_settings()
-account = client.codex.accounts.check()
-profile = client.codex.profile.retrieve()
-workspace_messages = client.codex.workspace_messages.list()
-```
+page = client.chatgpt.conversations.list(limit=20)
+matches = client.chatgpt.conversations.search("release notes")
+conversation = client.chatgpt.conversations.retrieve("conv_...")
 
-These methods return raw backend dictionaries because these payloads can contain
-personal account-specific fields and may change without notice.
-Profile writes remain explicit: `profile.update({...})` patches confirmed
-official fields, while `upload_photo(...)` only uploads and returns an asset
-pointer. `set_photo(...)` composes upload and profile update when that behavior
-is desired.
-
-`client.codex.memories.trace_summarize(...)` exposes the Codex memory
-summarization endpoint used by the official client. It accepts dictionaries or
-`RawMemory` objects and returns a typed `MemorySummarizeResponse`:
-
-```python
-from codex_backend_sdk import RawMemory
-
-summary = client.codex.memories.trace_summarize(
-    model="gpt-5.4",
-    traces=[
-        RawMemory(
-            id="trace_1",
-            metadata={"source_path": "memory.jsonl"},
-            items=[{"type": "message", "content": "Remember this"}],
-        )
-    ],
-    reasoning={"effort": "low"},
+global_matches = client.chatgpt.search.global_search(
+    "release notes",
+    sources=("conversation",),
+    limit=20,
 )
-print(summary.output[0].memory_summary)
 ```
 
-Transient HTTP failures (`429`, `5xx`, timeouts, and connection errors) are
-retried by default. Configure this with `OpenAI(max_retries=..., retry_base_delay=...)`.
+ChatGPT conversations are product history, not Codex App Server threads and not
+Responses API state.
 
-### File Uploads
-
-`client.files.upload(...)` follows the official Codex file flow for Apps/MCP
-file parameters: create file metadata under ChatGPT, upload bytes to the signed
-URL, then finalize the upload.
+### Browse projects and files
 
 ```python
-uploaded = client.files.upload("report.csv")
-print(uploaded.uri)  # sediment://file_...
+projects = client.chatgpt.projects.list_all()
+project = client.chatgpt.projects.retrieve(projects[0]["id"])
+project_conversations = client.chatgpt.projects.conversations(projects[0]["id"])
+
+library = client.chatgpt.files.list_library_files()
+content = client.chatgpt.files.download("file_...")
 ```
 
-### Unavailable or Deliberately Not Exposed
+Download helpers can return bytes, `BytesIO`, a persisted `Path`, or the raw
+HTTP response. OAuth is retained for ChatGPT URLs and omitted from signed CDN
+URLs.
 
-The exhaustive matrix in `docs/endpoint-coverage.md` records excluded
-commercial, administrative, attestation, reporting, and telemetry families.
-One otherwise useful API-shaped route was also observed but cannot currently be
-used with the ordinary Codex OAuth grant:
+### Use hosted Apps/MCP
 
-- `POST /v1/audio/speech` (auth reaches the endpoint, but Pro OAuth lacks
-  `api.model.audio.request` in current tests)
+```python
+tools = client.chatgpt.apps.list_tools()
+result = client.chatgpt.apps.call_tool("connector_tool_name", {"query": "..."})
+
+with client.chatgpt.apps.connect_hosted_mcp() as mcp:
+    hosted_tools = mcp.list_tools()["tools"]
+    resources = mcp.list_resources()["resources"]
+```
+
+Hosted tools may mutate external services. The calling harness must inspect
+tool annotations and own user confirmation; the SDK never auto-invokes tools.
+
+### Discover plugins and skills
+
+```python
+plugins = client.chatgpt.plugins.list_all(scope="GLOBAL")
+installed = client.chatgpt.plugins.installed_all()
+suggested = client.chatgpt.plugins.suggested()
+skill = client.chatgpt.plugins.skill("plugins~...", "skill-name")
+
+checkout = client.chatgpt.plugins.bundles.extract_plugin(
+    "plugins~...",
+    "./plugins/example",
+)
+```
+
+Bundle helpers enforce HTTPS, download limits, archive limits, safe relative
+paths, manifest checks, and atomic extraction. Signed download URLs never
+receive the user's OAuth bearer.
+
+### Discover connectors safely
+
+```python
+connectors = client.chatgpt.connectors.directory.list_all()
+detail = client.chatgpt.connectors.retrieve(
+    connectors[0]["id"],
+    include_actions=True,
+)
+links = client.chatgpt.connectors.links.list_accessible()
+```
+
+Read-only discovery is separate from
+`client.chatgpt.connectors.authentication` and
+`client.chatgpt.connectors.external_actions`. Linking, email, contacts, and
+Google Drive conversion require explicit method calls and caller-owned approval.
+
+### Generate subscription-backed speech
+
+```python
+speech = client.chatgpt.voice.synthesize_pronunciation(
+    text="Bonjour Baptiste",
+    pronunciation_language="fr-FR",
+)
+
+speech.write_to_file("bonjour.mp3")
+```
+
+The ChatGPT read-aloud service is smaller than the public speech API: it exposes
+language and playback speed, not arbitrary model and voice selection. It can
+return a typed in-memory object, bytes, `BytesIO`, a data URI, or a file path.
+
+## Advanced transports
+
+### Realtime voice
+
+```python
+answer = client.realtime.calls.create_v3(
+    sdp=offer_sdp,
+    session={
+        "model": "gpt-live-1-codex",
+        "instructions": "Speak naturally and stay concise.",
+    },
+)
+print(answer.answer_sdp)
+```
+
+Live probes confirmed `gpt-live-1-codex` and
+`gpt-live-1-boulder-alpha`. They are Codex Realtime v3 snapshots, not aliases
+for the public `gpt-realtime` family.
+
+Voice v2 WebSocket integrations can obtain their connection details separately:
+
+```python
+url = client.realtime_websocket_url(model="gpt-realtime-1.5")
+headers = client.realtime.websocket_headers(session_id="voice-session")
+```
+
+### Embeddings
+
+```python
+embedding = client.embeddings.create(
+    model="text-embedding-3-small",
+    input="Embed this sentence.",
+    dimensions=256,
+)
+print(embedding.data[0].embedding)
+```
+
+Unlike ChatGPT transcription and Codex image generation, embeddings target the
+OpenAI Platform endpoint and may consume the associated platform quota.
+
+## Authentication and lifecycle
+
+### Browser OAuth
+
+```python
+client = OpenAI().authenticate()
+```
+
+Use `authenticate(interactive=False)` to require existing usable credentials
+without opening a browser, or `force=True` to request a fresh interactive login.
+
+### Device-code OAuth
+
+```python
+client = OpenAI().authenticate_device_code(
+    on_code=lambda code: print(code.verification_url, code.user_code),
+    allowed_workspace_ids=["optional-workspace-id"],
+)
+```
+
+This is suited to headless or remote harnesses that cannot receive a loopback
+OAuth callback.
+
+### Logout versus revocation
+
+```python
+client.logout()  # local, offline, idempotent
+client.revoke()  # remote OAuth revocation, then local cleanup
+```
+
+`logout()` does not invalidate the account session remotely. `revoke()` is an
+explicit network mutation and clears local credentials only after success.
+
+## Reliability and safety
+
+- Transient `429`, `5xx`, timeout, and connection failures are retried by
+  default; configure `max_retries` and `retry_base_delay` on `OpenAI(...)`.
+- Private backend schemas may change without notice. Typed models are used only
+  where a stable boundary is useful.
+- Mutations are explicitly named and separated from discovery where possible.
+- Payments, subscriptions, workspace administration, attestation, reporting,
+  telemetry, analytics, and beacons are deliberately not exposed.
+- Personal access tokens are outside this OAuth-focused SDK surface.
+
+## Documentation
+
+- **[API reference](docs/api-reference.md):** complete resource tree, methods,
+  parameters, return values, and important validation behavior.
+- **[Backend protocol notes](docs/backend-api.md):** wire contracts, payload
+  details, backend limitations, and live observations.
+- **[Endpoint coverage](docs/endpoint-coverage.md):** exposed, live-probed,
+  contract-tested, and excluded surfaces.
+- **[Desktop endpoint inventory](docs/desktop-endpoint-inventory.md):** audited
+  source snapshots and comparison with the official Desktop client.
+- **[Changelog](CHANGELOG.md):** user-visible SDK changes.
+
+## Development
+
+```bash
+uv sync --extra dev
+uv run pytest -q
+uv run python -m compileall -q codex_backend_sdk
+uv build
+```
+
+Live probes are intentionally kept separate from the deterministic test suite:
+tests must not consume quota, mutate account state, or depend on rollout state.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

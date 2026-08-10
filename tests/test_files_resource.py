@@ -1,6 +1,12 @@
 from pathlib import Path
 
-from codex_backend_sdk import OpenAI, UploadedFile
+import pytest
+
+from codex_backend_sdk import (
+    CodexBackendUnsupportedParameterError,
+    OpenAI,
+    UploadedFile,
+)
 from codex_backend_sdk.storage import TokenStore
 
 
@@ -83,6 +89,13 @@ def test_files_upload_rejects_missing_path():
         assert "does not exist" in str(exc)
     else:
         raise AssertionError("missing path should fail before network calls")
+
+
+def test_files_create_exposes_official_signature_but_reports_oauth_scope_boundary():
+    client = FakeFilesClient()
+
+    with pytest.raises(CodexBackendUnsupportedParameterError, match="api.files.write"):
+        client.files.create(file=b"hello", purpose="vision")
 
 
 def test_files_upload_retries_finalize_payload(tmp_path, monkeypatch):

@@ -10,7 +10,7 @@ from typing import Any, TYPE_CHECKING
 import requests
 
 from .._models import UploadedFile
-from .._utils import _UNSET, _is_given
+from .._utils import _UNSET, CodexBackendUnsupportedParameterError, _is_given
 
 if TYPE_CHECKING:
     from .._client import CodexClient
@@ -25,6 +25,24 @@ class Files:
 
     def __init__(self, client: CodexClient) -> None:
         self._client = client
+
+    def create(
+        self,
+        *,
+        file: Any,
+        purpose: Any,
+        expires_after: Any = _UNSET,
+        extra_headers: Any = None,
+        extra_query: Any = None,
+        extra_body: Any = None,
+        timeout: Any = _UNSET,
+    ) -> UploadedFile:
+        """Expose the official signature while reporting the OAuth scope boundary."""
+        raise CodexBackendUnsupportedParameterError(
+            "Codex OAuth does not grant the `api.files.write` scope required by "
+            "the OpenAI Files API. Use `client.files.upload(path)` for the "
+            "additive ChatGPT/Codex Apps storage workflow."
+        )
 
     def upload(
         self,

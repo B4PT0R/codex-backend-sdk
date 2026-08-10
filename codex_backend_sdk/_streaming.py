@@ -11,9 +11,36 @@ import requests
 from ._models import ResponseStreamEvent
 
 
-def stream_response_events(response: requests.Response) -> Iterator[ResponseStreamEvent]:
-    for payload in iter_sse_payloads(response):
-        yield ResponseStreamEvent.model_validate(payload)
+class ResponseEventStream(Iterator[ResponseStreamEvent]):
+    """Closeable/context-managed event stream compatible with OpenAI streams."""
+
+    def __init__(self, response: requests.Response) -> None:
+        self.response = response
+        self._events = (
+            ResponseStreamEvent.model_validate(payload)
+            for payload in iter_sse_payloads(response)
+        )
+
+    def __iter__(self) -> "ResponseEventStream":
+        return self
+
+    def __next__(self) -> ResponseStreamEvent:
+        return next(self._events)
+
+    def close(self) -> None:
+        close = getattr(self.response, "close", None)
+        if close is not None:
+            close()
+
+    def __enter__(self) -> "ResponseEventStream":
+        return self
+
+    def __exit__(self, *_: Any) -> None:
+        self.close()
+
+
+def stream_response_events(response: requests.Response) -> ResponseEventStream:
+    return ResponseEventStream(response)
 
 
 def iter_sse_payloads(response: requests.Response) -> Iterator[dict[str, Any]]:

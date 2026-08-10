@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import urllib.parse
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 import requests
 
@@ -35,6 +35,8 @@ class CodexClient:
         timeout: float = 120,
         max_retries: int = 2,
         retry_base_delay: float = 0.25,
+        default_headers: Optional[Mapping[str, str]] = None,
+        default_query: Optional[Mapping[str, object]] = None,
     ) -> None:
         from .resources.codex import CodexResources
         from .resources.chatgpt import ChatGPTResources
@@ -50,6 +52,11 @@ class CodexClient:
         self._max_retries = max_retries
         self._retry_base_delay = retry_base_delay
         self._session = requests.Session()
+        self._closed = False
+        if default_headers:
+            self._session.headers.update(default_headers)
+        if default_query:
+            self._session.params.update(default_query)
         self._defaults = {
             "model": model,
             "instructions": instructions,
@@ -65,6 +72,61 @@ class CodexClient:
         self.files = Files(self)
         self.codex = CodexResources(self)
         self.chatgpt = ChatGPTResources(self)
+
+    def close(self) -> None:
+        self._session.close()
+        self._closed = True
+
+    def is_closed(self) -> bool:
+        return self._closed
+
+    def __enter__(self) -> "CodexClient":
+        return self
+
+    def __exit__(self, *_: Any) -> None:
+        self.close()
+
+    def copy(
+        self,
+        *,
+        timeout: Any = _UNSET,
+        max_retries: Any = _UNSET,
+        default_headers: Optional[Mapping[str, str]] = None,
+        set_default_headers: Optional[Mapping[str, str]] = None,
+        default_query: Optional[Mapping[str, object]] = None,
+        set_default_query: Optional[Mapping[str, object]] = None,
+        **unsupported: Any,
+    ) -> "CodexClient":
+        given_unsupported = {
+            key: value
+            for key, value in unsupported.items()
+            if value is not None and _is_given(value)
+        }
+        if given_unsupported:
+            raise NotImplementedError(
+                "Codex OAuth cannot override these OpenAI client options: "
+                + ", ".join(sorted(given_unsupported))
+            )
+        headers = dict(self._session.headers)
+        headers.update(default_headers or {})
+        if set_default_headers is not None:
+            headers = dict(set_default_headers)
+        query = dict(self._session.params)
+        query.update(default_query or {})
+        if set_default_query is not None:
+            query = dict(set_default_query)
+        return type(self)(
+            store=self._store,
+            model=self._defaults["model"],
+            instructions=self._defaults["instructions"],
+            timeout=self._timeout if not _is_given(timeout) else timeout,
+            max_retries=self._max_retries if not _is_given(max_retries) else max_retries,
+            retry_base_delay=self._retry_base_delay,
+            default_headers=headers,
+            default_query=query,
+        )
+
+    with_options = copy
 
     def authenticate(
         self,
@@ -237,15 +299,28 @@ class CodexClient:
         )
         return response
 
-    def _post(self, path: str, *, body: dict[str, Any], stream: bool = False) -> requests.Response:
+    def _post(
+        self,
+        path: str,
+        *,
+        body: dict[str, Any],
+        stream: bool = False,
+        headers: Optional[dict[str, str]] = None,
+        params: Optional[dict[str, Any]] = None,
+        timeout: Any = _UNSET,
+    ) -> requests.Response:
         self._ensure_auth()
         response = self._request_with_retries(
             "POST",
             f"{BASE_URL}{path}",
             json=body,
-            headers={"Accept": "text/event-stream"} if stream else None,
+            headers={
+                **({"Accept": "text/event-stream"} if stream else {}),
+                **(headers or {}),
+            } or None,
+            params=params,
             stream=stream,
-            timeout=self._timeout,
+            timeout=self._timeout if not _is_given(timeout) else timeout,
         )
         response.raise_for_status()
         return response

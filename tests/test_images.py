@@ -1,4 +1,5 @@
 import pytest
+from io import BytesIO
 
 from codex_backend_sdk import ImageResponse, OpenAI
 
@@ -56,6 +57,8 @@ def test_images_generate_posts_codex_payload_and_returns_typed_response():
                     "size": "1024x1024",
                     "custom": {"enabled": True},
                 },
+                "headers": None,
+                "params": None,
                 "timeout": 180,
             },
         )
@@ -66,11 +69,12 @@ def test_images_edit_normalizes_urls_and_posts_codex_payload():
     client = FakeImagesClient()
 
     response = client.images.edit(
-        images=[
+        image=[
             "data:image/png;base64,aW1hZ2U=",
             {"image_url": "https://example.test/reference.png"},
         ],
         prompt="add a red star",
+        mask={"image_url": "data:image/png;base64,bWFzaw=="},
         quality="low",
         timeout=240,
     )
@@ -87,12 +91,52 @@ def test_images_edit_normalizes_urls_and_posts_codex_payload():
                     ],
                     "prompt": "add a red star",
                     "model": "gpt-image-2",
+                    "mask": {"image_url": "data:image/png;base64,bWFzaw=="},
                     "quality": "low",
                 },
+                "headers": None,
+                "params": None,
                 "timeout": 240,
             },
         )
     ]
+
+
+@pytest.mark.parametrize(
+    "mask, expected",
+    [
+        (
+            "data:image/png;base64,bWFzaw==",
+            {"image_url": "data:image/png;base64,bWFzaw=="},
+        ),
+        ({"file_id": "file-mask"}, {"file_id": "file-mask"}),
+    ],
+)
+def test_images_edit_normalizes_mask_reference(mask, expected):
+    client = FakeImagesClient()
+
+    client.images.edit(
+        image="data:image/png;base64,aW1hZ2U=",
+        prompt="add a star",
+        mask=mask,
+    )
+
+    assert client.posts[0][1]["body"]["mask"] == expected
+
+
+@pytest.mark.parametrize(
+    "mask",
+    ["", {}, {"image_url": ""}, {"file_id": ""}, {"image_url": "url", "file_id": "file"}],
+)
+def test_images_edit_rejects_invalid_mask_references(mask):
+    client = FakeImagesClient()
+
+    with pytest.raises(ValueError, match="mask"):
+        client.images.edit(
+            image="data:image/png;base64,aW1hZ2U=",
+            prompt="add a star",
+            mask=mask,
+        )
 
 
 @pytest.mark.parametrize(
@@ -107,7 +151,7 @@ def test_images_edit_rejects_invalid_images(images, match):
     client = FakeImagesClient()
 
     with pytest.raises(ValueError, match=match):
-        client.images.edit(images=images, prompt="add a star")
+        client.images.edit(image=images, prompt="add a star")
 
 
 def test_images_generate_uses_minimal_default_payload():
@@ -120,6 +164,46 @@ def test_images_generate_uses_minimal_default_payload():
         "prompt": "a red flower",
         "model": "gpt-image-2",
     }
+
+
+def test_images_edit_accepts_official_binary_file_inputs():
+    client = FakeImagesClient()
+    source = BytesIO(b"png-source")
+    source.name = "source.png"
+
+    client.images.edit(
+        image=source,
+        mask=("mask.png", b"png-mask", "image/png"),
+        prompt="add a star",
+    )
+
+    body = client.posts[0][1]["body"]
+    assert body["images"] == [
+        {"image_url": "data:image/png;base64,cG5nLXNvdXJjZQ=="}
+    ]
+    assert body["mask"] == {
+        "image_url": "data:image/png;base64,cG5nLW1hc2s="
+    }
+    assert source.tell() == 0
+
+
+def test_images_edit_accepts_official_sequence_of_file_inputs():
+    client = FakeImagesClient()
+
+    client.images.edit(
+        image=(BytesIO(b"first"), BytesIO(b"second")),
+        prompt="combine them",
+        extra_headers={"x-test": "header"},
+        extra_query={"preview": "1"},
+    )
+
+    _, options = client.posts[0]
+    assert options["body"]["images"] == [
+        {"image_url": "data:application/octet-stream;base64,Zmlyc3Q="},
+        {"image_url": "data:application/octet-stream;base64,c2Vjb25k"},
+    ]
+    assert options["headers"] == {"x-test": "header"}
+    assert options["params"] == {"preview": "1"}
 
 
 @pytest.mark.parametrize("field", ["prompt", "model"])

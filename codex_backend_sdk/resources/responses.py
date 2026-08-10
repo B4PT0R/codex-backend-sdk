@@ -7,7 +7,7 @@ from typing import Any, TYPE_CHECKING
 
 from .._models import CompactedResponse, ParsedResponse, Response, ResponseStreamEvent
 from .._streaming import stream_response_events
-from .._utils import _UNSET, _default, _is_given, _reject_backend_unsupported
+from .._utils import _UNSET, _default, _is_given, _jsonable, _reject_backend_unsupported
 from ._responses_payloads import (
     ResponsesCreateRequest,
     _usage_from_backend,
@@ -44,10 +44,12 @@ class Responses:
         max_tool_calls: Any = _UNSET,
         metadata: Any = _UNSET,
         model: Any = _UNSET,
+        moderation: Any = _UNSET,
         parallel_tool_calls: Any = _UNSET,
         previous_response_id: Any = _UNSET,
         prompt: Any = _UNSET,
         prompt_cache_key: Any = _UNSET,
+        prompt_cache_options: Any = _UNSET,
         prompt_cache_retention: Any = _UNSET,
         reasoning: Any = _UNSET,
         safety_identifier: Any = _UNSET,
@@ -85,7 +87,8 @@ class Responses:
             top_p=top_p,
             truncation=truncation,
             user=user,
-            extra_body=extra_body,
+            moderation=moderation,
+            prompt_cache_options=prompt_cache_options,
         )
 
         if _is_given(store) and store is not False:
@@ -105,7 +108,17 @@ class Responses:
             tool_choice=tool_choice,
             tools=tools,
         )
-        response = self._client._post("/responses", body=request.payload, stream=True)
+        payload = dict(request.payload)
+        if extra_body:
+            payload.update(_jsonable(extra_body))
+        response = self._client._post(
+            "/responses",
+            body=payload,
+            stream=True,
+            headers=extra_headers,
+            params=extra_query,
+            timeout=timeout,
+        )
         events = stream_response_events(response)
         stream_enabled = bool(stream) if _is_given(stream) else False
 
@@ -116,7 +129,7 @@ class Responses:
     def parse(
         self,
         *,
-        text_format: type[Any],
+        text_format: Any = _UNSET,
         background: Any = _UNSET,
         context_management: Any = _UNSET,
         conversation: Any = _UNSET,
@@ -127,15 +140,18 @@ class Responses:
         max_tool_calls: Any = _UNSET,
         metadata: Any = _UNSET,
         model: Any = _UNSET,
+        moderation: Any = _UNSET,
         parallel_tool_calls: Any = _UNSET,
         previous_response_id: Any = _UNSET,
         prompt: Any = _UNSET,
         prompt_cache_key: Any = _UNSET,
+        prompt_cache_options: Any = _UNSET,
         prompt_cache_retention: Any = _UNSET,
         reasoning: Any = _UNSET,
         safety_identifier: Any = _UNSET,
         service_tier: Any = _UNSET,
         store: Any = _UNSET,
+        stream: Any = _UNSET,
         stream_options: Any = _UNSET,
         temperature: Any = _UNSET,
         text: Any = _UNSET,
@@ -145,12 +161,20 @@ class Responses:
         top_p: Any = _UNSET,
         truncation: Any = _UNSET,
         user: Any = _UNSET,
+        verbosity: Any = _UNSET,
         extra_headers: Any = None,
         extra_query: Any = None,
         extra_body: Any = None,
         timeout: Any = _UNSET,
     ) -> ParsedResponse[Any]:
-        fmt = pydantic_to_format(text_format)
+        if _is_given(stream) and stream not in {None, False}:
+            raise NotImplementedError("responses.parse() does not support streaming responses.")
+        if _is_given(verbosity) and verbosity is not None:
+            if _is_given(text) and text is not None:
+                text = {**normalize_text(text), "verbosity": verbosity}
+            else:
+                text = {"verbosity": verbosity}
+        fmt = pydantic_to_format(text_format) if _is_given(text_format) else None
         response = self.create(
             background=background,
             context_management=context_management,
@@ -162,10 +186,12 @@ class Responses:
             max_tool_calls=max_tool_calls,
             metadata=metadata,
             model=model,
+            moderation=moderation,
             parallel_tool_calls=parallel_tool_calls,
             previous_response_id=previous_response_id,
             prompt=prompt,
             prompt_cache_key=prompt_cache_key,
+            prompt_cache_options=prompt_cache_options,
             prompt_cache_retention=prompt_cache_retention,
             reasoning=reasoning,
             safety_identifier=safety_identifier,
@@ -174,7 +200,7 @@ class Responses:
             stream=False,
             stream_options=stream_options,
             temperature=temperature,
-            text=merge_text_format(text, fmt),
+            text=merge_text_format(text, fmt) if fmt is not None else text,
             tool_choice=tool_choice,
             tools=tools,
             top_logprobs=top_logprobs,
@@ -188,15 +214,17 @@ class Responses:
         )
         if not isinstance(response, Response):
             raise TypeError("responses.parse() expected a non-streaming Response")
-        return ParsedResponse(
-            response=response,
-            output_parsed=text_format.model_validate_json(response.output_text),
+        output_parsed = (
+            text_format.model_validate_json(response.output_text)
+            if _is_given(text_format)
+            else None
         )
+        return ParsedResponse(response=response, output_parsed=output_parsed)
 
     def compact(
         self,
         *,
-        input: list[dict[str, Any]],
+        input: Any = _UNSET,
         model: Any = _UNSET,
         instructions: Any = _UNSET,
         tools: Any = _UNSET,
@@ -204,13 +232,29 @@ class Responses:
         reasoning: Any = _UNSET,
         service_tier: Any = _UNSET,
         prompt_cache_key: Any = _UNSET,
+        previous_response_id: Any = _UNSET,
+        prompt_cache_options: Any = _UNSET,
+        prompt_cache_retention: Any = _UNSET,
         text: Any = _UNSET,
+        extra_headers: Any = None,
+        extra_query: Any = None,
+        extra_body: Any = None,
+        timeout: Any = _UNSET,
     ) -> CompactedResponse:
+        _reject_backend_unsupported(
+            previous_response_id=previous_response_id,
+            prompt_cache_options=prompt_cache_options,
+            prompt_cache_retention=prompt_cache_retention,
+        )
         normalized_tools = normalize_tools(tools)
         payload = {
             "model": _default(model, self._client._defaults["model"]),
             "instructions": _default(instructions, self._client._defaults["instructions"]) or "",
-            "input": [normalize_input_item(item) for item in input],
+            "input": (
+                []
+                if not _is_given(input) or input is None
+                else [normalize_input_item(item) for item in input]
+            ),
             "tools": normalized_tools,
             "parallel_tool_calls": (
                 bool(_default(parallel_tool_calls, False)) if normalized_tools else False
@@ -224,7 +268,15 @@ class Responses:
             payload["prompt_cache_key"] = prompt_cache_key
         if _is_given(text) and text is not None:
             payload["text"] = normalize_text(text)
-        data = self._client._post("/responses/compact", body=payload).json()
+        if extra_body:
+            payload.update(_jsonable(extra_body))
+        data = self._client._post(
+            "/responses/compact",
+            body=payload,
+            headers=extra_headers,
+            params=extra_query,
+            timeout=timeout,
+        ).json()
         return CompactedResponse(
             id=data.get("id", ""),
             object=data.get("object", "response.compacted"),

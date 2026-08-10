@@ -6,7 +6,7 @@ import time
 from typing import Any, TYPE_CHECKING
 
 from .._models import Model, SyncPage
-from .._utils import _UNSET
+from .._utils import _UNSET, CodexBackendUnsupportedParameterError, _is_given
 
 if TYPE_CHECKING:
     from .._client import CodexClient
@@ -32,11 +32,19 @@ class Models:
         extra_body: Any = None,
         timeout: Any = _UNSET,
     ) -> SyncPage:
-        if not force_refresh and self._cache is not None:
+        if extra_body:
+            raise CodexBackendUnsupportedParameterError(
+                "The Codex model catalog does not support a GET request body."
+            )
+        has_request_options = bool(extra_headers or extra_query) or _is_given(timeout)
+        if not force_refresh and not has_request_options and self._cache is not None:
             if time.time() - self._cache_fetched_at <= _CACHE_TTL:
                 return self._cache
 
-        response = self._client._get_raw("/models", params={"client_version": CLIENT_VERSION})
+        params = {"client_version": CLIENT_VERSION, **(extra_query or {})}
+        response = self._client._get_raw(
+            "/models", params=params, headers=extra_headers, timeout=timeout
+        )
         data = response.json()
         models = [_model_from_backend(item) for item in data.get("models", [])]
         models.sort(key=lambda model: getattr(model, "priority", 0))
@@ -56,7 +64,12 @@ class Models:
     ) -> Model:
         if not model:
             raise ValueError(f"Expected a non-empty value for `model` but received {model!r}")
-        for candidate in self.list():
+        for candidate in self.list(
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            timeout=timeout,
+        ):
             if candidate.id == model:
                 return candidate
         raise LookupError(f"Model not found: {model}")

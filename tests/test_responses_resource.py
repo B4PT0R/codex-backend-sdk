@@ -8,6 +8,7 @@ from codex_backend_sdk import OpenAI, ParsedResponse, Response
 class FakeSSE:
     def __init__(self, events):
         self._events = events
+        self.closed = False
 
     def iter_lines(self):
         for event in self._events:
@@ -16,6 +17,9 @@ class FakeSSE:
             else:
                 yield event
         yield b""
+
+    def close(self):
+        self.closed = True
 
 
 class FakeJSONResponse:
@@ -33,8 +37,8 @@ class FakeClient(OpenAI):
         self.posts = []
         self.gets = []
 
-    def _post(self, path, *, body, stream=False):
-        self.posts.append((path, body, stream))
+    def _post(self, path, *, body, stream=False, **options):
+        self.posts.append((path, body, stream, options))
         if path == "/responses/compact":
             return FakeJSONResponse({
                 "id": "resp_123",
@@ -54,7 +58,7 @@ class FakeClient(OpenAI):
         ])
 
     def _get_raw(self, path, *, params=None, headers=None, timeout=None):
-        self.gets.append((path, params))
+        self.gets.append((path, params, headers, timeout))
         return FakeJSONResponse(
             {
                 "models": [
@@ -91,8 +95,8 @@ class TextOptions:
 
 
 class ParseFakeClient(FakeClient):
-    def _post(self, path, *, body, stream=False):
-        self.posts.append((path, body, stream))
+    def _post(self, path, *, body, stream=False, **options):
+        self.posts.append((path, body, stream, options))
         return FakeSSE([
             (
                 'data: {"type":"response.output_text.delta","delta":'
@@ -125,7 +129,7 @@ def test_responses_create_collects_to_pydantic_response():
     assert "output_text" not in response.model_dump()
     assert response.usage.total_tokens == 3
 
-    path, payload, stream = client.posts[0]
+    path, payload, stream, _ = client.posts[0]
     assert path == "/responses"
     assert stream is True
     assert payload["model"] == "gpt-test"
@@ -169,6 +173,8 @@ def test_response_exposes_tool_calls_and_reasoning_summary():
             "arguments": "{}",
         }
     ]
+    assert response.output[0].type == "reasoning"
+    assert response.output[1].call_id == "call_123"
 
 
 def test_responses_parse_sends_strict_schema_and_returns_parsed_response():
@@ -184,7 +190,7 @@ def test_responses_parse_sends_strict_schema_and_returns_parsed_response():
     assert isinstance(parsed, ParsedResponse)
     assert parsed.id == "resp_parse"
     assert parsed.output_parsed == ParsedPerson(name="Ada", age=37)
-    path, payload, stream = client.posts[0]
+    path, payload, stream, _ = client.posts[0]
     assert path == "/responses"
     assert stream is True
     assert payload["text"]["verbosity"] == "low"
@@ -242,6 +248,37 @@ def test_responses_create_stream_returns_openai_event_objects():
     assert events[0].delta == {"text": "hel"}
     assert events[-1].type == "response.completed"
     assert events[-1].response["id"] == "resp_123"
+    assert events[-1].response.id == "resp_123"
+
+
+def test_responses_stream_is_a_closeable_context_manager():
+    client = FakeClient()
+
+    with client.responses.create(input="Hi", stream=True) as stream:
+        assert next(stream).type == "response.content_part.delta"
+        raw_response = stream.response
+
+    assert raw_response.closed is True
+
+
+def test_responses_create_forwards_official_request_options_and_extra_body():
+    client = FakeClient()
+
+    client.responses.create(
+        input="Hi",
+        extra_headers={"x-test": "header"},
+        extra_query={"preview": "1"},
+        extra_body={"custom": True},
+        timeout=17,
+    )
+
+    _, payload, _, options = client.posts[0]
+    assert payload["custom"] is True
+    assert options == {
+        "headers": {"x-test": "header"},
+        "params": {"preview": "1"},
+        "timeout": 17,
+    }
 
 
 def test_models_resource_returns_iterable_page():
@@ -267,6 +304,24 @@ def test_models_resource_can_force_refresh_cached_page():
     assert len(client.gets) == 2
 
 
+def test_models_resource_forwards_official_request_options():
+    client = FakeClient()
+    client.models.list()
+
+    client.models.list(
+        extra_headers={"x-test": "header"},
+        extra_query={"preview": "1"},
+        timeout=19,
+    )
+
+    assert client.gets[1] == (
+        "/models",
+        {"client_version": "0.130.0", "preview": "1"},
+        {"x-test": "header"},
+        19,
+    )
+
+
 def test_responses_compact_sends_shared_request_fields():
     client = FakeClient()
 
@@ -287,7 +342,7 @@ def test_responses_compact_sends_shared_request_fields():
     assert compacted.usage.input_tokens == 11
     assert compacted.usage.output_tokens == 7
     assert compacted.usage.total_tokens == 18
-    path, payload, stream = client.posts[0]
+    path, payload, stream, _ = client.posts[0]
     assert path == "/responses/compact"
     assert stream is False
     assert payload == {

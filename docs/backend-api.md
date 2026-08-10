@@ -3,6 +3,11 @@
 Sourced from live observation and `codex-rs` source (`openai/codex`).  
 Last updated: 2026-08-10.
 
+This document describes backend contracts and observations. For the supported
+Python interface, start with [`api-reference.md`](api-reference.md); for
+implementation and live-probe status, use
+[`endpoint-coverage.md`](endpoint-coverage.md).
+
 ---
 
 ## Base URLs
@@ -437,12 +442,20 @@ image endpoint.
 
 ### `POST /backend-api/codex/images/edits`
 
-**SDK method**: `client.images.edit(...)`
+**SDK method**: `client.images.edit(image=..., ...)`
 
 **Status**: Supported through ChatGPT OAuth. Accepts one or more remote URLs or
 `data:` URLs as `images[].image_url`, plus the same prompt/model/background/count/
-quality/size controls as generation. Verified by generating a source image and
-editing it through the authenticated backend.
+quality/size controls as generation. It also accepts an optional `mask` image
+reference using an `image_url` (including a base64 data URL). Generation,
+editing, and masked-edit request acceptance were verified live against the
+authenticated backend. The official `file_id` reference form is normalized by
+the SDK but remains contract-derived rather than live-verified on Codex OAuth.
+
+The public `image` parameter deliberately matches `openai-python`; only the
+private Codex transport expands it into the backend's plural `images` array.
+See [`openai-compatibility.md`](openai-compatibility.md) for verified format,
+streaming, fidelity, and OAuth boundaries.
 
 ### `POST /v1/audio/speech`
 

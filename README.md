@@ -37,7 +37,15 @@ response = client.responses.create(
 )
 
 print(response.output_text)
+
+# Remove the locally stored OAuth credentials when you are done.
+client.logout()
 ```
+
+`authenticate()` reuses stored Codex credentials when possible and starts the
+interactive ChatGPT OAuth flow when needed. `logout()` is local and idempotent:
+it clears the shared Codex credential file and unauthenticates the current
+client; it does not revoke the ChatGPT account session remotely.
 
 ## Streaming
 
@@ -151,8 +159,10 @@ response = client.responses.create(
 
 ## Supported Backend Endpoints
 
-The SDK exposes the supported backend endpoints through either OpenAI-shaped
-resources (`responses`, `models`, `realtime`) or Codex-only resources (`codex`).
+The SDK exposes the supported backend endpoints through OpenAI-shaped resources
+(`responses`, `models`, `realtime`), Codex-only resources (`codex`), and a
+separate `chatgpt` namespace for product APIs observed specifically in the
+official Desktop app.
 
 | Backend endpoint | SDK method | Notes |
 |---|---|---|
@@ -160,7 +170,7 @@ resources (`responses`, `models`, `realtime`) or Codex-only resources (`codex`).
 | `POST /backend-api/codex/responses/compact` | `client.responses.compact(...)` | Codex-specific helper for encrypted context compaction. |
 | `POST /backend-api/codex/memories/trace_summarize` | `client.codex.memories.trace_summarize(...)` | Raw Codex memory trace summarization helper. |
 | `GET /backend-api/codex/models` | `client.models.list()` / `client.models.retrieve(...)` | OpenAI-shaped model objects with Codex metadata preserved as extra fields. |
-| `POST /backend-api/codex/realtime/calls` | `client.realtime.calls.create(...)` | Experimental SDP call creation. The protocol is implemented by Codex, but ChatGPT routing is rollout-dependent and may return `404 Not Found`. |
+| `POST /backend-api/codex/realtime/calls` | `client.realtime.calls.create(...)` / `create_v3(...)` | OAuth-authenticated SDP call creation. Realtime v3 accepts the confirmed Codex snapshots `gpt-live-1-codex` and `gpt-live-1-boulder-alpha`. |
 | `wss://api.openai.com/v1/realtime?model=...` | `client.realtime_websocket_url(...)` / `client.realtime.websocket_headers(...)` | Voice v2 helpers; requires a Realtime API key obtained during OAuth or supplied by the auth store. |
 | `POST /v1/embeddings` | `client.embeddings.create(...)` | Uses the Codex OAuth access token against `api.openai.com`; usage is charged to the associated OpenAI Platform organization. |
 | `POST /backend-api/transcribe` | `client.audio.transcriptions.create(...)` | Uses the authenticated ChatGPT backend for non-streaming batch transcription; no developer API key is required. |
@@ -170,6 +180,15 @@ resources (`responses`, `models`, `realtime`) or Codex-only resources (`codex`).
 | `POST /backend-api/codex/rate-limit-reset-credits/consume` | `client.codex.rate_limit_reset_credits.consume(...)` | Consumes a reset credit using an idempotent redemption request ID. |
 | `GET /backend-api/wham/usage` | `client.codex.usage()` | Codex/ChatGPT quota and rate-limit status. |
 | `GET /backend-api/wham/config/requirements` | `client.codex.config.requirements()` | Raw managed requirements/config payload for the authenticated account. |
+| `GET /backend-api/wham/config/bundle` | `client.codex.config.bundle()` | Selected cloud-managed Codex configuration bundle. |
+| `GET /backend-api/wham/settings/user` | `client.codex.config.user_settings()` | Authenticated Codex user settings. |
+| `GET /backend-api/wham/accounts/check` | `client.codex.accounts.check()` | Account availability and entitlement check. |
+| `GET /backend-api/wham/profiles/me` | `client.codex.profile.retrieve()` | Token-usage profile used by current Codex clients. |
+| `GET /backend-api/wham/workspace-messages` | `client.codex.workspace_messages.list()` | Workspace-scoped backend messages. |
+| `POST /backend-api/wham/tasks` | `client.codex.tasks.create(...)` | Creates a Codex cloud task from a raw evolving backend payload. |
+| `POST /backend-api/wham/remote/control/server/enroll` | `client.codex.remote_control.enroll(...)` | Enrolls a Codex-compatible Remote Control server. |
+| `POST /backend-api/wham/remote/control/server/refresh` | `client.codex.remote_control.refresh(...)` | Renews its short-lived Remote Control token. |
+| `WSS /backend-api/wham/remote/control/server` | `client.codex.remote_control.connect(...)` | Opens the protocol-v3 envelope transport with cursor resume. |
 | `GET /backend-api/wham/tasks/list` | `client.codex.tasks.list(...)` | Raw Codex cloud task listing. |
 | `GET /backend-api/wham/tasks/{task_id}` | `client.codex.tasks.retrieve(task_id)` | Raw Codex cloud task detail. |
 | `GET /backend-api/wham/tasks/{task_id}/turns` | `client.codex.tasks.turns.list(task_id)` | Raw task turn mapping. |
@@ -178,6 +197,29 @@ resources (`responses`, `models`, `realtime`) or Codex-only resources (`codex`).
 | `POST /backend-api/files` + signed upload | `client.files.upload(...)` | Uploads local files for Codex Apps/MCP file parameters and returns `sediment://...` metadata. |
 | `GET /backend-api/memories` | `client.codex.memories.list()` | Raw ChatGPT memory payload for the authenticated account. |
 | `GET /backend-api/user_system_messages` | `client.codex.user_system_messages.retrieve()` | Raw ChatGPT customization/system-message payload. |
+
+Desktop-observed ChatGPT surfaces are deliberately separate from the Codex
+protocol:
+
+```python
+# ChatGPT history, not Codex App Server threads
+page = client.chatgpt.conversations.list(limit=20)
+conversation = client.chatgpt.conversations.retrieve("conv_...")
+
+# ChatGPT product model and voice metadata
+chatgpt_models = client.chatgpt.models.list()
+voices = client.chatgpt.voice.voices()
+```
+
+`client.chatgpt.conversations` exposes explicit history, search, batch, CRUD,
+branch, prepare, streaming-create/resume, and attachment-list operations.
+`client.chatgpt.projects`, `.files`, `.pins`, and `.shares` cover persisted
+Desktop content and its explicit mutations. `client.chatgpt.account`, `.models`,
+`.voice`, and `.sentinel` expose the other verified Desktop session surfaces.
+Responses remain raw dictionaries (or raw streaming HTTP responses) because
+these undocumented schemas can evolve. See
+[`docs/desktop-endpoint-inventory.md`](docs/desktop-endpoint-inventory.md) for
+the audited source snapshot and endpoints intentionally left inventory-only.
 
 ### Responses
 
@@ -310,16 +352,27 @@ Common extra fields include:
 The SDK keeps the realtime surface available for integrations that bridge Codex
 auth with voice sessions.
 
-`client.realtime.calls.create(...)` mirrors the official OpenAI SDK call shape:
+`client.realtime.calls.create(...)` mirrors the SDP call shape. For the current
+Codex Realtime v3 protocol, use `create_v3(...)` with the Codex-specific model:
 
 ```python
-answer = client.realtime.calls.create(
+answer = client.realtime.calls.create_v3(
     sdp=offer_sdp,
-    session={"type": "realtime", "model": "gpt-realtime-1.5"},
+    session={
+        "model": "gpt-live-1-codex",
+        "instructions": "Speak naturally and stay concise.",
+    },
 )
 
 print(answer.text)
 ```
+
+Live ChatGPT OAuth probes validated both `gpt-live-1-codex` and
+`gpt-live-1-boulder-alpha`. The bare `gpt-live` alias, `gpt-live-1`,
+`gpt-live-latest`, and an unknown suffix were rejected by the backend, so the
+SDK allows only the two confirmed identifiers. These models are not
+interchangeable with the public `gpt-realtime` family documented for developer
+API-key Realtime sessions.
 
 For WebSocket-based plugins such as `codex-agent`, the client also exposes the
 Voice v2 connection details:
@@ -372,6 +425,47 @@ with open("meeting.wav", "rb") as audio:
 
 print(transcription.text)
 ```
+
+### ChatGPT Read-Aloud Speech
+
+The official Desktop app exposes a smaller subscription-backed read-aloud
+service. It accepts text, a pronunciation language, and playback speed, but
+does not expose the voice and model controls of the public OpenAI speech API.
+
+```python
+speech = client.chatgpt.voice.synthesize_pronunciation(
+    text="Bonjour Baptiste",
+    pronunciation_language="fr-FR",
+)
+
+speech.write_to_file("bonjour.mp3")
+# `speech.content` also provides the decoded bytes directly.
+
+data_uri = client.chatgpt.voice.synthesize_pronunciation(
+    text="Bonjour Baptiste",
+    pronunciation_language="fr-FR",
+    response_format="data_uri",
+)
+
+buffer = client.chatgpt.voice.synthesize_pronunciation(
+    text="Bonjour Baptiste",
+    pronunciation_language="fr-FR",
+    response_format="bytes_io",
+)
+
+path = client.chatgpt.voice.synthesize_pronunciation(
+    text="Bonjour Baptiste",
+    pronunciation_language="fr-FR",
+    response_format="file",
+    output_path="bonjour.mp3",
+)
+```
+
+This uses `POST /backend-api/pronunciation/synthesize?format=mp3` with ChatGPT
+OAuth. The default `speech` format returns `ChatGPTSpeech` without touching the
+filesystem; `data_uri`, `bytes_io`, and explicit `file` outputs are also
+available. Availability follows the authenticated ChatGPT subscription and may
+change independently of the public API.
 
 ### Image Generation
 
@@ -439,18 +533,52 @@ result = client.codex.rate_limit_reset_credits.consume(
 
 ### Codex Cloud Tasks
 
-The `client.codex.tasks` and `client.codex.environments` namespaces expose
-read-only WHAM cloud-task payloads as raw backend dictionaries.
+The `client.codex.tasks` and `client.codex.environments` namespaces expose WHAM
+cloud-task payloads as raw backend dictionaries.
 
 ```python
 tasks = client.codex.tasks.list(limit=10)
 task = client.codex.tasks.retrieve(tasks["items"][0]["id"])
 turns = client.codex.tasks.turns.list(task["task"]["id"])
 environments = client.codex.environments.list()
+created = client.codex.tasks.create({"prompt": "Fix the failing checks", "environment_id": "env_1"})
 ```
 
 Supported task-list filters are `limit`, `cursor`, `task_filter`, and
 `environment_id`.
+
+### Remote Control
+
+`client.codex.remote_control` implements the server side used by Codex App
+Server: OAuth enrollment, token refresh, pairing, paired-client management, and
+the protocol-v3 WebSocket transport.
+
+```python
+server = client.codex.remote_control.enroll(
+    name="My workstation",
+    installation_id="stable-installation-id",
+    os="linux",
+    arch="x86_64",
+    app_server_version="0.147.0",
+)
+
+pairing = client.codex.remote_control.pairing.start(server, manual_code=True)
+print(pairing.manual_pairing_code)
+
+with client.codex.remote_control.connect(
+    server,
+    installation_id="stable-installation-id",
+    server_name="My workstation",
+) as connection:
+    for client_envelope in connection:
+        print(client_envelope)
+```
+
+The WebSocket deliberately exposes raw Codex envelope dictionaries. Callers
+implementing an App Server bridge must preserve `client_id`, `stream_id`,
+`seq_id`, chunk, ACK, and cursor semantics. `reconnect(connection)` refreshes an
+expiring token and resumes from the latest cursor observed by the connection.
+Tokens and pairing codes are secrets and must not be logged.
 
 ### ChatGPT Account Data
 
@@ -461,6 +589,11 @@ not part of the official OpenAI SDK.
 memories = client.codex.memories.list()
 customization = client.codex.user_system_messages.retrieve()
 requirements = client.codex.config.requirements()
+bundle = client.codex.config.bundle()
+settings = client.codex.config.user_settings()
+account = client.codex.accounts.check()
+profile = client.codex.profile.retrieve()
+workspace_messages = client.codex.workspace_messages.list()
 ```
 
 These methods return raw backend dictionaries because these payloads can contain

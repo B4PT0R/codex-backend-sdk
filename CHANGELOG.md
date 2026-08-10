@@ -2,6 +2,39 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+- Add a dedicated `client.chatgpt` namespace for official-Desktop conversation,
+  account/session, model, voice, and Sentinel backend surfaces.
+- Cover Desktop projects, file-library and attachment metadata, pins, and share
+  links through explicit `client.chatgpt` resources.
+- Cover Desktop-only Codex usage detail, task-turn logs/actions, cloud
+  environment lifecycle, and GitHub repository discovery resources.
+- Add a typed subscription-backed ChatGPT read-aloud helper with decoded audio
+  bytes and direct MP3 file output.
+- Preserve the original OAuth grant during token refresh instead of narrowing
+  refreshed tokens by omitting the connector read/invoke scopes.
+- Document the broader endpoint inventory extracted from the official Desktop
+  bundle and distinguish it from routes used by `codex-rs`.
+
+### Added
+- Added a guarded Codex Realtime v3 call helper for OAuth-authenticated
+  `gpt-live-1-codex` and `gpt-live-1-boulder-alpha` sessions, rejecting
+  unrecognized `gpt-live` aliases and snapshots.
+- Added raw helpers for the current Codex account check, token-usage profile,
+  managed config bundle, user settings, workspace messages, and cloud-task
+  creation endpoints.
+- Added the complete Codex Remote Control backend surface: enrollment, token
+  refresh, pairing, paired-client listing/revocation, and protocol-v3 WebSocket
+  envelopes with cursor-aware reconnection.
+
+### Documentation
+- Refreshed the OAuth endpoint inventory from the current Codex and Desktop
+  checkouts, including Realtime v3, remote-control lifecycle, plugins, and the
+  hosted Apps/MCP transport.
+- Distinguished Codex-only `gpt-live` Realtime v3 from the public API-key
+  `gpt-realtime` surface.
+
 ## [0.3.10] - 2026-07-17
 
 ### Added

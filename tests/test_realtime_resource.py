@@ -71,6 +71,38 @@ def test_realtime_calls_create_posts_session_as_backend_json():
     assert kwargs["headers"]["Accept"] == "application/sdp"
 
 
+def test_realtime_calls_create_v3_accepts_confirmed_models_and_sets_alpha_header():
+    client = FakeRealtimeClient()
+
+    for model in ("gpt-live-1-codex", "gpt-live-1-boulder-alpha"):
+        client.realtime.calls.create_v3(
+            sdp="offer-sdp",
+            session={"model": model, "instructions": "Be concise."},
+        )
+
+    path, kwargs = client.raw_posts[0]
+    assert path == "/realtime/calls"
+    assert kwargs["body"]["session"] == {
+        "model": "gpt-live-1-codex",
+        "instructions": "Be concise.",
+    }
+    assert kwargs["headers"]["openai-alpha"] == "quicksilver=v2"
+    assert kwargs["params"] == {"intent": "quicksilver", "architecture": "avas"}
+    assert client.raw_posts[1][1]["body"]["session"]["model"] == (
+        "gpt-live-1-boulder-alpha"
+    )
+
+    try:
+        client.realtime.calls.create_v3(
+            sdp="offer-sdp",
+            session={"model": "gpt-live"},
+        )
+    except ValueError as exc:
+        assert "gpt-live" in str(exc)
+    else:
+        raise AssertionError("Expected an unsupported gpt-live alias to be rejected")
+
+
 def test_realtime_calls_create_rejects_non_object_session():
     client = FakeRealtimeClient()
 

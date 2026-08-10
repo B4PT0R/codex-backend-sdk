@@ -15,6 +15,9 @@ class FakeCodexClient(OpenAI):
         self.wham_gets = []
         self.chatgpt_gets = []
         self.posts = []
+        self.wham_posts = []
+        self.wham_patches = []
+        self.wham_deletes = []
 
     def _get_wham(self, path, *, params=None):
         self.wham_gets.append((path, params))
@@ -22,6 +25,16 @@ class FakeCodexClient(OpenAI):
             return {"rate_limit": {"allowed": True}}
         if path == "/wham/config/requirements":
             return {"requirements": [{"name": "network"}]}
+        if path == "/wham/config/bundle":
+            return {"bundle": {"version": "1"}}
+        if path == "/wham/settings/user":
+            return {"settings": {"theme": "system"}}
+        if path == "/wham/accounts/check":
+            return {"account": {"eligible": True}}
+        if path == "/wham/profiles/me":
+            return {"profile": {"plan_type": "pro"}}
+        if path == "/wham/workspace-messages":
+            return {"messages": []}
         if path == "/wham/tasks/list":
             return {"items": [{"id": "task_1", "title": "Task"}], "cursor": None}
         if path == "/wham/tasks/task_1":
@@ -32,7 +45,42 @@ class FakeCodexClient(OpenAI):
             return {"sibling_turns": []}
         if path == "/wham/environments":
             return [{"id": "env_1", "label": "default"}]
+        if path == "/wham/usage/daily-token-usage-breakdown":
+            return {"days": []}
+        if path == "/wham/usage/credit-usage-events":
+            return {"events": []}
+        if path == "/wham/tasks/task_1/turns/turn_1":
+            return {"id": "turn_1"}
+        if path == "/wham/tasks/task_1/turns/turn_1/logs":
+            return {"logs": []}
+        if path == "/wham/environments/search":
+            return {"items": []}
+        if path == "/wham/environments/env_1/with-creator-and-machine":
+            return {"id": "env_1", "creator": {"id": "user_1"}}
+        if path == "/wham/machines":
+            return {"items": []}
+        if path == "/wham/github/branches/github-repo_1/search":
+            return {"items": []}
         raise AssertionError(f"Unexpected WHAM path: {path}")
+
+    def _post_wham(self, path, *, body=None, timeout=None):
+        self.wham_posts.append((path, body))
+        if path == "/wham/tasks":
+            return {"task": {"id": "task_2"}}
+        if path.startswith("/wham/tasks/task_1/"):
+            return {"ok": True}
+        if path == "/wham/usage/thread_usage/query":
+            return {"threads": []}
+        if path == "/wham/environments/env_1/reset-cache":
+            return {"ok": True}
+        raise AssertionError(f"Unexpected WHAM path: {path}")
+
+    def _patch_wham(self, path, *, body, timeout=None):
+        self.wham_patches.append((path, body))
+        return {"id": "env_1", **body}
+
+    def _delete_wham(self, path, *, params=None, timeout=None):
+        self.wham_deletes.append((path, params))
 
     def _get(self, path, *, params=None):
         if path == "/rate-limit-reset-credits":
@@ -245,3 +293,107 @@ def test_codex_config_requirements_returns_raw_payload():
 
     assert requirements == {"requirements": [{"name": "network"}]}
     assert client.wham_gets == [("/wham/config/requirements", None)]
+
+
+def test_codex_account_profile_and_workspace_messages_return_raw_payloads():
+    client = FakeCodexClient()
+
+    assert client.codex.accounts.check() == {"account": {"eligible": True}}
+    assert client.codex.profile.retrieve() == {"profile": {"plan_type": "pro"}}
+    assert client.codex.workspace_messages.list() == {"messages": []}
+    assert client.wham_gets == [
+        ("/wham/accounts/check", None),
+        ("/wham/profiles/me", None),
+        ("/wham/workspace-messages", None),
+    ]
+
+
+def test_codex_config_exposes_bundle_and_user_settings():
+    client = FakeCodexClient()
+
+    assert client.codex.config.bundle() == {"bundle": {"version": "1"}}
+    assert client.codex.config.user_settings() == {"settings": {"theme": "system"}}
+    assert client.wham_gets == [
+        ("/wham/config/bundle", None),
+        ("/wham/settings/user", None),
+    ]
+
+
+def test_codex_tasks_create_posts_raw_backend_payload():
+    client = FakeCodexClient()
+
+    assert client.codex.tasks.create({"prompt": "Fix it"}) == {"task": {"id": "task_2"}}
+    assert client.wham_posts == [("/wham/tasks", {"prompt": "Fix it"})]
+
+    with pytest.raises(TypeError, match="JSON object"):
+        client.codex.tasks.create(["invalid"])
+
+
+def test_codex_desktop_usage_detail_routes_are_exposed():
+    client = FakeCodexClient()
+
+    assert client.codex.usage_details.daily_token_breakdown() == {"days": []}
+    assert client.codex.usage_details.credit_events() == {"events": []}
+    assert client.codex.usage_details.threads(["thread_1"]) == {"threads": []}
+    assert client.wham_gets == [
+        ("/wham/usage/daily-token-usage-breakdown", None),
+        ("/wham/usage/credit-usage-events", None),
+    ]
+    assert client.wham_posts == [
+        ("/wham/usage/thread_usage/query", {"thread_ids": ["thread_1"]})
+    ]
+
+
+def test_codex_desktop_task_turn_details_and_actions_are_exposed():
+    client = FakeCodexClient()
+
+    assert client.codex.tasks.turns.retrieve("task_1", "turn_1")["id"] == "turn_1"
+    assert client.codex.tasks.turns.logs("task_1", "turn_1") == {"logs": []}
+    client.codex.tasks.archive("task_1")
+    client.codex.tasks.cancel("task_1")
+    client.codex.tasks.recover("task_1")
+    client.codex.tasks.mark_read("task_1")
+
+    assert client.wham_posts == [
+        ("/wham/tasks/task_1/archive", None),
+        ("/wham/tasks/task_1/cancel", None),
+        ("/wham/tasks/task_1/recover", None),
+        ("/wham/tasks/task_1/mark_read", None),
+    ]
+
+
+def test_codex_desktop_environment_lifecycle_is_explicit():
+    client = FakeCodexClient()
+
+    client.codex.environments.search("demo", limit=10)
+    client.codex.environments.retrieve("env_1")
+    client.codex.environments.machines()
+    client.codex.environments.update("env_1", {"label": "Updated"})
+    client.codex.environments.reset_cache("env_1")
+    client.codex.environments.delete("env_1")
+
+    assert client.wham_gets == [
+        ("/wham/environments/search", {"query": "demo", "limit": 10}),
+        ("/wham/environments/env_1/with-creator-and-machine", None),
+        ("/wham/machines", None),
+    ]
+    assert client.wham_patches == [
+        ("/wham/environments/env_1", {"label": "Updated"})
+    ]
+    assert client.wham_posts == [
+        ("/wham/environments/env_1/reset-cache", None)
+    ]
+    assert client.wham_deletes == [("/wham/environments/env_1", None)]
+
+
+def test_codex_desktop_repository_branch_search_normalizes_id():
+    client = FakeCodexClient()
+
+    client.codex.repositories.branches("repo_1", "main", cursor="cursor_1")
+
+    assert client.wham_gets == [
+        (
+            "/wham/github/branches/github-repo_1/search",
+            {"query": "main", "page_size": 20, "cursor": "cursor_1"},
+        )
+    ]

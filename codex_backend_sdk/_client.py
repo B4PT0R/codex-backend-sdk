@@ -37,6 +37,7 @@ class CodexClient:
         retry_base_delay: float = 0.25,
     ) -> None:
         from .resources.codex import CodexResources
+        from .resources.chatgpt import ChatGPTResources
         from .resources.models import Models
         from .resources.openai_oauth import Audio, Embeddings
         from .resources.files import Files
@@ -63,6 +64,7 @@ class CodexClient:
         self.images = Images(self)
         self.files = Files(self)
         self.codex = CodexResources(self)
+        self.chatgpt = ChatGPTResources(self)
 
     def authenticate(
         self,
@@ -125,6 +127,16 @@ class CodexClient:
             "email": store.email if store else None,
             "plan_type": store.plan_type if store else None,
         }
+
+    def logout(self) -> bool:
+        """Clear local OAuth credentials and unauthenticate this client."""
+        from .storage import clear_tokens
+
+        cleared = clear_tokens()
+        self._store = None
+        self._session.headers.pop("Authorization", None)
+        self._session.headers.pop("ChatGPT-Account-ID", None)
+        return cleared
 
     def _set_store(self, store: TokenStore) -> None:
         self._store = store
@@ -231,7 +243,7 @@ class CodexClient:
         self,
         path: str,
         *,
-        body: dict[str, Any],
+        body: Optional[dict[str, Any]] = None,
         headers: Optional[dict[str, str]] = None,
         params: Optional[dict[str, Any]] = None,
         timeout: Any = _UNSET,
@@ -283,12 +295,119 @@ class CodexClient:
             params=params,
             timeout=30,
         )
+        response.raise_for_status()
         return response.json()
 
-    def _get_chatgpt(self, path: str) -> dict[str, Any]:
+    def _post_wham(
+        self,
+        path: str,
+        *,
+        body: dict[str, Any],
+        headers: Optional[dict[str, str]] = None,
+        use_oauth_headers: bool = True,
+        timeout: Any = _UNSET,
+    ) -> dict[str, Any]:
         self._ensure_auth()
-        response = self._request_with_retries("GET", f"{CHATGPT_BASE_URL}{path}", timeout=30)
+        response = self._request_with_retries(
+            "POST",
+            f"{WHAM_BASE_URL}{path}",
+            json=body,
+            headers=headers,
+            timeout=self._timeout if not _is_given(timeout) else timeout,
+            _use_session=use_oauth_headers,
+        )
+        response.raise_for_status()
         return response.json()
+
+    def _patch_wham(
+        self,
+        path: str,
+        *,
+        body: dict[str, Any],
+        timeout: Any = _UNSET,
+    ) -> dict[str, Any]:
+        self._ensure_auth()
+        response = self._request_with_retries(
+            "PATCH",
+            f"{WHAM_BASE_URL}{path}",
+            json=body,
+            timeout=self._timeout if not _is_given(timeout) else timeout,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def _delete_wham(
+        self,
+        path: str,
+        *,
+        params: Optional[dict[str, Any]] = None,
+        timeout: Any = _UNSET,
+    ) -> None:
+        self._ensure_auth()
+        response = self._request_with_retries(
+            "DELETE",
+            f"{WHAM_BASE_URL}{path}",
+            params=params,
+            timeout=self._timeout if not _is_given(timeout) else timeout,
+        )
+        response.raise_for_status()
+
+    def _get_chatgpt(
+        self,
+        path: str,
+        *,
+        params: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        self._ensure_auth()
+        response = self._request_with_retries(
+            "GET",
+            f"{CHATGPT_BASE_URL}{path}",
+            params=params,
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def _patch_chatgpt(
+        self,
+        path: str,
+        *,
+        body: Optional[dict[str, Any]] = None,
+        params: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        return self._request_chatgpt("PATCH", path, body=body, params=params).json()
+
+    def _delete_chatgpt(
+        self,
+        path: str,
+        *,
+        params: Optional[dict[str, Any]] = None,
+    ) -> None:
+        self._request_chatgpt("DELETE", path, params=params)
+
+    def _request_chatgpt(
+        self,
+        method: str,
+        path: str,
+        *,
+        body: Optional[dict[str, Any]] = None,
+        params: Optional[dict[str, Any]] = None,
+        headers: Optional[dict[str, str]] = None,
+        stream: bool = False,
+        timeout: Any = _UNSET,
+    ) -> requests.Response:
+        self._ensure_auth()
+        response = self._request_with_retries(
+            method,
+            f"{CHATGPT_BASE_URL}{path}",
+            json=body,
+            params=params,
+            headers=headers,
+            stream=stream,
+            timeout=self._timeout if not _is_given(timeout) else timeout,
+        )
+        response.raise_for_status()
+        return response
 
     def _post_chatgpt(
         self,

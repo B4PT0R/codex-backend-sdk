@@ -85,3 +85,25 @@ def test_authenticate_force_requires_interactive_mode():
         assert "interactive=True" in str(exc)
     else:
         raise AssertionError("Expected ValueError")
+
+
+def test_logout_clears_persisted_and_in_memory_credentials(monkeypatch):
+    cleared = []
+    monkeypatch.setattr("codex_backend_sdk.storage.clear_tokens", lambda: cleared.append(True) or True)
+    client = CodexClient(store=_store())
+
+    assert client.logout() is True
+
+    assert cleared == [True]
+    assert client.authenticated is False
+    assert client.account_info()["authenticated"] is False
+    assert "Authorization" not in client._session.headers
+    assert "ChatGPT-Account-ID" not in client._session.headers
+
+
+def test_logout_is_idempotent(monkeypatch):
+    monkeypatch.setattr("codex_backend_sdk.storage.clear_tokens", lambda: False)
+    client = CodexClient()
+
+    assert client.logout() is False
+    assert client.authenticated is False

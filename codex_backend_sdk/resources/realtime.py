@@ -12,6 +12,12 @@ if TYPE_CHECKING:
     from .._client import CodexClient
 
 
+CODEX_REALTIME_V3_MODELS = frozenset({
+    "gpt-live-1-codex",
+    "gpt-live-1-boulder-alpha",
+})
+
+
 class Realtime:
     """Realtime resources matching the official OpenAI SDK surface where present."""
 
@@ -35,11 +41,13 @@ class Realtime:
 
 
 class RealtimeCalls:
-    """Experimental Codex WebRTC call creation.
+    """Codex WebRTC call creation over ChatGPT OAuth.
 
-    Availability depends on the Realtime call route enabled for the authenticated
-    ChatGPT account. A correctly authenticated request may still return 404 while
-    the backend is not rolled out.
+    Realtime v3 uses the JSON call shape with one of the explicitly supported
+    Codex ``gpt-live`` snapshots. Arbitrary ``gpt-live`` aliases are not accepted
+    on this OAuth-authenticated route. The
+    public ``gpt-realtime`` model belongs to the API-key Realtime surface and is
+    not interchangeable with the OAuth-authenticated Codex v3 route.
     """
     def __init__(self, client: CodexClient) -> None:
         self._client = client
@@ -91,3 +99,34 @@ class RealtimeCalls:
             timeout=timeout,
         )
         return RealtimeCallResponse(response)
+
+    def create_v3(
+        self,
+        *,
+        sdp: str,
+        session: Any,
+        extra_headers: Optional[dict[str, str]] = None,
+        extra_query: Optional[dict[str, Any]] = None,
+        extra_body: Any = None,
+        timeout: Any = _UNSET,
+    ) -> RealtimeCallResponse:
+        """Create a Codex Realtime v3 call using a confirmed Codex model."""
+        session_payload = _jsonable(session)
+        if not isinstance(session_payload, dict):
+            raise TypeError("Expected `session` to serialize to a JSON object.")
+        model = session_payload.get("model")
+        if model not in CODEX_REALTIME_V3_MODELS:
+            supported = ", ".join(sorted(CODEX_REALTIME_V3_MODELS))
+            raise ValueError(
+                "Codex Realtime v3 over ChatGPT OAuth requires "
+                f"one of these `session.model` values: {supported}."
+            )
+        headers = {**(extra_headers or {}), "openai-alpha": "quicksilver=v2"}
+        return self.create(
+            sdp=sdp,
+            session=session_payload,
+            extra_headers=headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            timeout=timeout,
+        )

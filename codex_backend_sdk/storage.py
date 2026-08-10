@@ -137,6 +137,17 @@ def save_tokens(store: TokenStore) -> None:
         pass
 
 
+def clear_tokens() -> bool:
+    """Remove persisted Codex credentials, returning whether a file existed."""
+    path = _auth_path()
+    existed = path.exists()
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+    return existed
+
+
 def load_tokens() -> Optional[TokenStore]:
     path = _auth_path()
     if not path.exists():

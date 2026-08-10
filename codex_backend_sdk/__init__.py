@@ -21,9 +21,18 @@ __version__ = "0.3.10"
 
 from .oauth import run_oauth_flow, refresh_access_token
 from .storage import load_tokens, save_tokens, TokenStore
+from .resources.remote_control import (
+    RemoteControlClient,
+    RemoteControlClientPage,
+    RemoteControlConnection,
+    RemoteControlEnrollment,
+    RemoteControlPairing,
+    RemoteControlPairingStatus,
+)
 from .codex_client import (
     CodexBackendUnsupportedParameterError,
     CodexBaseModel,
+    ChatGPTSpeech,
     CreateEmbeddingResponse,
     Embedding,
     EmbeddingUsage,
@@ -62,6 +71,7 @@ __all__ = [
     "OpenAI",
     "CodexBackendUnsupportedParameterError",
     "CodexBaseModel",
+    "ChatGPTSpeech",
     "CreateEmbeddingResponse",
     "Embedding",
     "EmbeddingUsage",
@@ -81,6 +91,12 @@ __all__ = [
     "ResponseStreamEvent",
     "ResponseUsage",
     "RealtimeCallResponse",
+    "RemoteControlClient",
+    "RemoteControlClientPage",
+    "RemoteControlConnection",
+    "RemoteControlEnrollment",
+    "RemoteControlPairing",
+    "RemoteControlPairingStatus",
     "SyncPage",
     "CompactedResponse",
     "Transcription",

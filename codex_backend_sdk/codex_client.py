@@ -9,6 +9,7 @@ from __future__ import annotations
 from ._client import CodexClient, OpenAI
 from ._models import (
     CodexBaseModel,
+    ChatGPTSpeech,
     CompactedResponse,
     CreateEmbeddingResponse,
     Embedding,
@@ -43,6 +44,7 @@ from ._utils import CodexBackendUnsupportedParameterError, image_b64, image_url
 __all__ = [
     "CodexBackendUnsupportedParameterError",
     "CodexBaseModel",
+    "ChatGPTSpeech",
     "CodexClient",
     "CreateEmbeddingResponse",
     "Embedding",

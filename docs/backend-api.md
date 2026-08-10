@@ -1,7 +1,7 @@
 # Codex Backend API — Reverse-Engineering Notes
 
 Sourced from live observation and `codex-rs` source (`openai/codex`).  
-Last updated: 2026-05-12.
+Last updated: 2026-08-10.
 
 ---
 
@@ -262,19 +262,31 @@ on plan/account capabilities.
 
 Realtime audio/video call initiation.
 
-**SDK method**: `client.realtime.calls.create(...)`
+**SDK methods**: `client.realtime.calls.create(...)`,
+`client.realtime.calls.create_v3(...)`
 
-**Status**: Experimental and rollout-dependent. The SDK follows the Codex
-client protocol:
+**Status**: Supported by the current Codex client over ChatGPT OAuth. The SDK
+follows the Codex client protocol:
 
 - plain SDP offer: `client.realtime.calls.create(sdp=offer_sdp)`
 - AVAS SDP offer plus session payload:
   `client.realtime.calls.create(sdp=offer_sdp, session={...})`
+- Realtime v3 frameless call:
+  `client.realtime.calls.create_v3(sdp=offer_sdp, session={"model": "gpt-live-1-codex"})`
 
-The OAuth-authenticated ChatGPT route is not enabled for every account and may
-return `404 Not Found` until Codex supplies an experimental WebRTC call base URL.
-This is distinct from the public Realtime WebSocket route, which currently
-requires a developer API key.
+For Realtime v3, Codex sends `openai-alpha: quicksilver=v2`, the AVAS query
+parameters `intent=quicksilver&architecture=avas`, and a `gpt-live` session.
+Live WebRTC call-creation probes against the ChatGPT OAuth route validated both
+`gpt-live-1-codex` and `gpt-live-1-boulder-alpha`: each returned an SDP answer
+and a Realtime call id. The aliases `gpt-live`, `gpt-live-1`,
+`gpt-live-latest`, and an unknown suffix returned HTTP 400. `create_v3`
+therefore accepts exactly the two confirmed identifiers rather than every
+`gpt-live` prefix.
+
+This is distinct from the public Realtime API documented for developer API keys.
+On the OpenAI API host, the same Codex implementation uses `/v1/live` for the
+frameless v3 call, whereas the ChatGPT OAuth backend keeps the
+`/backend-api/codex/realtime/calls` route and its JSON `{sdp, session}` body.
 
 The response exposes `.answer_sdp` and `.call_id`, while preserving the binary
 helpers `.content`, `.text`, `.read()`, `.iter_bytes()`, and
@@ -375,6 +387,10 @@ validation, but a valid Pro-plan request currently returns `401` with missing
 ## WHAM endpoints
 
 WHAM is the ChatGPT account/quota management layer, distinct from the Codex API.
+The official Desktop application references a broader set of WHAM and general
+ChatGPT routes than `codex-rs`; see
+[`desktop-endpoint-inventory.md`](desktop-endpoint-inventory.md) for the audited
+snapshot, Desktop-only comparison, and exposure recommendations.
 
 ### `GET /backend-api/wham/usage`
 
@@ -437,6 +453,47 @@ Fetch managed requirements/config for this account (plan-gated settings).
 
 ---
 
+### `GET /backend-api/wham/config/bundle`
+
+Fetch the selected cloud-managed Codex configuration bundle.
+
+**SDK method**: `client.codex.config.bundle()`
+
+---
+
+### `GET /backend-api/wham/settings/user`
+
+Fetch authenticated Codex user settings. Current Codex requests this with
+cache bypass headers; callers should treat the raw payload as evolving.
+
+**SDK method**: `client.codex.config.user_settings()`
+
+---
+
+### `GET /backend-api/wham/accounts/check`
+
+Check account availability and Codex entitlements.
+
+**SDK method**: `client.codex.accounts.check()`
+
+---
+
+### `GET /backend-api/wham/profiles/me`
+
+Fetch the authenticated token-usage profile.
+
+**SDK method**: `client.codex.profile.retrieve()`
+
+---
+
+### `GET /backend-api/wham/workspace-messages`
+
+List workspace-scoped messages supplied by the Codex backend.
+
+**SDK method**: `client.codex.workspace_messages.list()`
+
+---
+
 ### `GET /backend-api/wham/tasks/list`
 
 List cloud tasks (Pro/Enterprise cloud execution feature).
@@ -444,6 +501,16 @@ List cloud tasks (Pro/Enterprise cloud execution feature).
 **SDK method**: `client.codex.tasks.list(...)`
 
 **Query params**: `limit`, `task_filter`, `environment_id`, `cursor`.
+
+---
+
+### `POST /backend-api/wham/tasks`
+
+Create a Codex cloud task. The request schema evolves with the cloud-task
+product, so the SDK currently accepts a JSON-serializable object and returns the
+raw response.
+
+**SDK method**: `client.codex.tasks.create(body)`
 
 ---
 
@@ -490,8 +557,44 @@ as backend metadata, not plaintext values.
 
 ### WebSocket: `wss://chatgpt.com/backend-api/wham/remote/control/server`
 
-Remote control / agent-as-a-service websocket. Enrollment via:  
-`POST /backend-api/wham/remote/control/server/enroll`
+Remote control / agent-as-a-service websocket. The current Codex transport also
+uses these OAuth-authenticated lifecycle routes:
+
+- `POST /backend-api/wham/remote/control/server/enroll`
+- `POST /backend-api/wham/remote/control/server/refresh`
+- `POST /backend-api/wham/remote/control/server/pair`
+- `POST /backend-api/wham/remote/control/server/pair/status`
+- `GET /backend-api/wham/remote/control/environments/{environment_id}/clients`
+  with optional `cursor`, `limit`, and `order` query parameters.
+- `DELETE /backend-api/wham/remote/control/environments/{environment_id}/clients/{client_id}`
+
+**SDK namespace**: `client.codex.remote_control`
+
+The SDK exposes enrollment and refresh as typed `RemoteControlEnrollment`
+objects, pairing and paired-client management as focused resources, and the
+WebSocket as a synchronous raw-envelope connection. It uses protocol version 3,
+base64-encodes `x-codex-name`, refreshes tokens within five minutes of expiry,
+and can reconnect with the latest observed subscription cursor.
+
+The transport intentionally does not reinterpret the embedded App Server
+JSON-RPC messages. Callers must preserve the Codex `ClientEnvelope` and
+`ServerEnvelope` fields and implement their expected chunk/ACK routing.
+
+---
+
+## Plugins and hosted Apps/MCP
+
+The current Codex and Desktop codepaths also use the following ChatGPT OAuth
+surfaces:
+
+- `GET /backend-api/plugins/export/curated` — metadata and signed download for
+  the curated plugin bundle.
+- `GET /backend-api/plugins/featured` — legacy remote plugin discovery.
+- `POST /backend-api/ps/mcp` — hosted Apps/MCP JSON-RPC transport.
+
+They are intentionally inventory-only for now. The first two feed Codex's
+plugin cache and the last is an MCP transport rather than a stable REST
+resource; exposing thin JSON helpers would hide important protocol ownership.
 
 ---
 

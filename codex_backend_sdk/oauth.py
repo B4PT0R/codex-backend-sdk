@@ -180,7 +180,6 @@ def refresh_access_token(refresh_token: str) -> dict:
             "client_id": CLIENT_ID,
             "grant_type": "refresh_token",
             "refresh_token": refresh_token,
-            "scope": "openid profile email offline_access",
         },
         timeout=30,
     )

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import base64
 import time
 from collections.abc import Iterator
+from io import BytesIO
+from pathlib import Path
 from typing import Any, Generic, Literal, Optional, TypeVar
 
 import requests
@@ -223,6 +226,29 @@ class CreateEmbeddingResponse(CodexBaseModel):
 
 class Transcription(CodexBaseModel):
     text: str = ""
+
+
+class ChatGPTSpeech(CodexBaseModel):
+    """Base64 audio returned by ChatGPT Desktop's limited read-aloud service."""
+
+    base64_data: str = Field(alias="base64")
+    content_type: str = Field(alias="contentType")
+
+    @property
+    def content(self) -> bytes:
+        return base64.b64decode(self.base64_data, validate=True)
+
+    @property
+    def data_uri(self) -> str:
+        return f"data:{self.content_type};base64,{self.base64_data}"
+
+    def to_bytes_io(self) -> BytesIO:
+        return BytesIO(self.content)
+
+    def write_to_file(self, path: str | Path) -> Path:
+        destination = Path(path)
+        destination.write_bytes(self.content)
+        return destination
 
 
 class ImageData(CodexBaseModel):

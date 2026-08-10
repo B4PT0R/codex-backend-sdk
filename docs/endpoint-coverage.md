@@ -16,6 +16,18 @@ Statuses:
 Private schemas remain raw unless a stable boundary is useful. A live status
 proves current account availability, not a public compatibility guarantee.
 
+## Audit closure
+
+For the snapshots named in `desktop-endpoint-inventory.md`, every production
+networking module in `codex-api/src/endpoint`, `backend-client`, cloud tasks,
+plugins/connectors, login, and Remote Control was reconciled with this matrix.
+The extracted official Desktop ASAR was searched across Electron, the initial
+webview bundle, and lazy JavaScript chunks; candidate paths were then checked at
+their concrete HTTP-client call sites to discard UI routes and inert URL
+recognizers. No useful endpoint remains with **inventory** status in this
+snapshot. Future source upgrades can reintroduce that status until their new
+routes are classified.
+
 ## Core Codex and protocol transports
 
 | Method and path | SDK surface | Status |
@@ -134,3 +146,9 @@ harnesses.
 | `GET /backend-api/accounts/check/v4-2023-04-27` | excluded; subscription/credit-management contract |
 | `GET /backend-api/wham/agent-identities/jwks` | excluded; security-sensitive Agent Identity verification surface |
 | `POST https://auth.openai.com/api/accounts/v1/agent/...` | excluded; registers durable signing keys and task assertions, within the goal's identity/attestation exclusion |
+| `GET https://auth.openai.com/api/accounts/v1/user-auth-credential/whoami` | excluded from this OAuth SDK audit; hydrates separately provisioned personal access tokens |
+| `POST /backend-api/codex/remote/control/client/{enroll,refresh}/{start,finish}` | excluded; Desktop device-key enrollment requires step-up authorization and cryptographic device proof |
+| `GET/PATCH /backend-api/accounts/{account_id}/settings` and spend controls | excluded; workspace administration and billing controls |
+| `/backend-api/{checkout_pricing_config,payments,subscriptions,referrals}/...` | excluded; commercial and billing lifecycle |
+| `/backend-api/{report_flow,ios/attestation_challenge}/...` | excluded; reporting and device-attestation lifecycle |
+| `/backend-api/wham/{statsig/bootstrap,analytics-events/events}` | excluded; feature bootstrap and observability |

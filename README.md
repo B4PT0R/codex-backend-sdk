@@ -805,11 +805,12 @@ uploaded = client.files.upload("report.csv")
 print(uploaded.uri)  # sediment://file_...
 ```
 
-### Observed But Not Exposed
+### Unavailable or Deliberately Not Exposed
 
-The reverse-engineering notes in `docs/backend-api.md` include additional
-observed endpoints. They are not exposed as SDK resources yet because they are
-plan-gated, unavailable on `chatgpt.com`, or not stable enough:
+The exhaustive matrix in `docs/endpoint-coverage.md` records excluded
+commercial, administrative, attestation, reporting, and telemetry families.
+One otherwise useful API-shaped route was also observed but cannot currently be
+used with the ordinary Codex OAuth grant:
 
 - `POST /v1/audio/speech` (auth reaches the endpoint, but Pro OAuth lacks
   `api.model.audio.request` in current tests)

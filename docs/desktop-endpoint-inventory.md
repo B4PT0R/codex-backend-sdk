@@ -70,8 +70,9 @@ links. Connector authentication and external actions were not invoked live.
 
 ## High-value Codex/WHAM routes absent from `codex-rs`
 
-These are the closest fit for future SDK resources because they extend existing
-Codex account, cloud-task, environment, and Remote Control concepts.
+These were prioritized as SDK resources because they extend existing Codex
+account, cloud-task, environment, and Remote Control concepts. Their current
+exposure status is authoritative in `endpoint-coverage.md`.
 
 | Method | Path | Observed role |
 | --- | --- | --- |
@@ -272,12 +273,21 @@ make them suitable SDK primitives. They are stateful, commercially sensitive,
 security-sensitive, or internal observability surfaces and remain documented
 only at the family level.
 
-## Recommended SDK follow-up order
+Remote Control's Desktop-client role additionally has WebSocket and
+`client/{enroll,refresh}/{start,finish}` routes. They are intentionally not raw
+SDK conveniences: enrollment combines a fresh password-authenticated step-up
+token, locally generated device keys, signed challenges, strict account checks,
+and a narrowly scoped client-session token. The independent server role and
+account-authorized discovery/pairing surfaces remain exposed, while this
+device-attestation lifecycle stays excluded.
 
-1. Add read-only usage detail and cloud task-turn/log helpers.
-2. Complete environment and repository discovery with explicit mutation
-   methods separated from reads.
-3. Audit any remaining cloud-task operations against current official clients.
-4. Record deeper model/voice/system-hint response schemas.
-5. Audit the remaining specialized Desktop surfaces against their value to an
-   independent harness, keeping external mutations explicit.
+## Snapshot conclusion and future order
+
+All useful functional surfaces found in the audited snapshots are now either
+exposed and tested or assigned an explicit exclusion above and in
+`endpoint-coverage.md`. There is no unclassified implementation backlog for
+this snapshot. On a later official-client upgrade, repeat the source/ASAR scan,
+classify newly introduced routes, then prioritize: inference and transports;
+files/search/apps; account and cloud-task reads; explicit reversible mutations;
+specialized product helpers. Keep commercial/admin, attestation, reporting, and
+telemetry surfaces excluded by default.

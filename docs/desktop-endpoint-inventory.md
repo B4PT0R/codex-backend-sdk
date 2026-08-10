@@ -7,6 +7,8 @@ assertion that every route is enabled for every account.
 
 ## Audited snapshot and method
 
+- Codex checkout: `openai/codex` at
+  `c0ad3ab014a27d66d1631fb00f7a70b035f46f0d`.
 - Linux-port checkout: `openai/codex-desktop-linux` at
   `05bbbc6cb4b7729e01b15348c0082a086816da84`.
 - Bundled official application: `openai-codex-electron` `26.721.31836`.
@@ -183,6 +185,12 @@ The hosted plugin feeds and both observed Apps transports are now exposed:
 `client.chatgpt.plugins` covers featured IDs and curated export metadata;
 `client.chatgpt.apps` covers Desktop's `/wham/apps` envelope and Codex's full
 MCP Streamable HTTP `/ps/mcp` lifecycle.
+
+The newer Codex checkout also uses `/ps/plugins/list`, `search`, `installed`,
+`suggested`, workspace sharing, detail, and explicit install/uninstall routes.
+Their read surfaces are live-probed and exposed under `client.chatgpt.plugins`;
+installation mutations are contract-tested only. Workspace plugin publication
+and share-management routes remain a separate mutation-heavy follow-up lot.
 
 ## Apps, connectors, and files
 

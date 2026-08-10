@@ -656,11 +656,24 @@ tools and resource convenience methods. A live OAuth probe returned 172 tools,
 37 resources, no resource templates, and no session ID for the current
 stateless deployment.
 
-The read-only feeds are exposed through `client.chatgpt.plugins`: `featured()`
-returned 29 plugin IDs for the `codex` platform in a live probe, and
-`curated_export()` returned the backend-supplied signed archive URL. The SDK
+The legacy read-only feeds remain exposed through `client.chatgpt.plugins`:
+`featured()` returned 29 plugin IDs for the `codex` platform in a live probe,
+and `curated_export()` returned the backend-supplied signed archive URL. The SDK
 returns export metadata rather than downloading or installing the archive
 implicitly.
+
+Current `codex-rs` additionally uses the `/ps/plugins` service. The same SDK
+resource now exposes paginated `list`, `search`, `installed`,
+`workspace_shared`, `suggested`, and `retrieve` methods. All requests carry the
+official `OAI-Product-Sku: codex` header; pagination preserves `pageToken` and
+rejects repeated tokens. `include_download_urls` is opt-in so ordinary catalog
+reads do not mint signed bundle URLs unnecessarily.
+
+A read-only live probe returned 184 global catalog entries, three installed
+plugins, 40 suggestions, valid search/detail responses, and an empty workspace
+shared page for the test account. `plugins.installation.install/uninstall`
+follows the official mutations and verifies the returned plugin ID and enabled
+state, but neither mutation was invoked live.
 
 ---
 

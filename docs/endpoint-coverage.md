@@ -53,6 +53,14 @@ proves current account availability, not a public compatibility guarantee.
 | `POST /backend-api/ecosystem/launch_widget` | `client.chatgpt.apps.launch_widget` | contract; explicit mutation |
 | `GET /backend-api/plugins/export/curated` | `client.chatgpt.plugins.curated_export` | live |
 | `GET /backend-api/plugins/featured` | `client.chatgpt.plugins.featured` | live; 29 Codex IDs observed |
+| `GET /backend-api/ps/plugins/list` | `client.chatgpt.plugins.list/list_all` | live; 184 global plugins observed |
+| `GET /backend-api/ps/plugins/search` | `client.chatgpt.plugins.search` | live |
+| `GET /backend-api/ps/plugins/installed` | `client.chatgpt.plugins.installed/installed_all` | live; 3 installed plugins observed |
+| `GET /backend-api/ps/plugins/suggested` | `client.chatgpt.plugins.suggested` | live; 40 suggestions observed |
+| `GET /backend-api/ps/plugins/workspace/shared` | `client.chatgpt.plugins.workspace_shared` | live; empty workspace page observed |
+| `GET /backend-api/ps/plugins/{id}` | `client.chatgpt.plugins.retrieve` | live |
+| `POST /backend-api/ps/plugins/{id}/install` | `client.chatgpt.plugins.installation.install` | contract; explicit mutation |
+| `POST /backend-api/ps/plugins/{id}/uninstall` | `client.chatgpt.plugins.installation.uninstall` | contract; explicit mutation |
 | `POST /backend-api/ps/mcp` | `client.chatgpt.apps.connect_hosted_mcp` | live; MCP 2025-06-18, 172 tools, 37 resources |
 | `GET /backend-api/connectors/directory/list[_workspace]` | `client.chatgpt.connectors.directory` | live; 2,614 apps observed |
 | `POST /backend-api/ps/apps/batch` | `client.chatgpt.connectors.batch_metadata` | live |

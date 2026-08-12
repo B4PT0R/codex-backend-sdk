@@ -303,6 +303,10 @@ def _usage_from_backend(raw: Any) -> ResponseUsage:
         total_tokens=raw.get("total_tokens", 0),
         input_tokens_details=TokenDetails(
             cached_tokens=(raw.get("input_tokens_details") or {}).get("cached_tokens", 0),
+            cache_write_tokens=(raw.get("input_tokens_details") or {}).get(
+                "cache_write_tokens",
+                0,
+            ),
         ),
         output_tokens_details=TokenDetails(
             reasoning_tokens=(raw.get("output_tokens_details") or {}).get("reasoning_tokens", 0),

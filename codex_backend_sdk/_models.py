@@ -84,6 +84,7 @@ class CodexBaseModel(BaseModel):
 
 class TokenDetails(CodexBaseModel):
     cached_tokens: int = 0
+    cache_write_tokens: int = 0
     reasoning_tokens: int = 0
 
 

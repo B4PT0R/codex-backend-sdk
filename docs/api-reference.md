@@ -57,7 +57,6 @@ OpenAI(
 | `logout()` | none | `bool` | Clears local stored credentials and client headers. Returns whether the credential file existed. No network request. |
 | `revoke()` | none | `bool` | Revokes the refresh token, or access token fallback, then performs local logout. Raises if remote revocation fails. |
 | `authenticated` | property | `bool` | Whether the client currently has an account-bearing token store. |
-| `realtime_websocket_url(...)` | `model` | `str` | Builds the OpenAI Realtime WebSocket URL; requires a non-empty model. |
 
 #### Low-level OAuth helpers
 
@@ -140,9 +139,10 @@ instance. Streaming is not exposed by `parse()`.
 | `text` | object or unset | Text verbosity/format controls. |
 | `tools`, `tool_choice` | JSON-compatible | Tool context retained during compaction. |
 | `parallel_tool_calls`, `prompt_cache_key`, `service_tier` | optional | Forwarded when supplied. |
-Returns `CompactedResponse`. Its `output` contains replayable response items and
-opaque encrypted `compaction_summary` items; `usage` preserves backend token
-accounting.
+Returns `CompactedResponse`. Its `output` contains the single opaque encrypted
+`compaction` item returned by explicit remote compaction v2; `usage` preserves
+backend token accounting. The public helper remains stable even though the
+backend transport moved from `/responses/compact` to `/responses`.
 
 #### `client.responses.websocket`
 
@@ -246,14 +246,15 @@ Platform quota rather than the ChatGPT subscription.
 
 | Method | Parameters | Returns |
 | --- | --- | --- |
-| `client.realtime.websocket_headers(...)` | `session_id=None` | Realtime authorization/originator headers |
-| `client.realtime.calls.create(...)` | `sdp`, optional `session`, `extra_headers`, `extra_query`, `extra_body`, `timeout` | typed `RealtimeCallResponse` |
-| `client.realtime.calls.create_v3(...)` | `sdp`, `session`, plus the same transport extensions | typed `RealtimeCallResponse` |
+| `client.realtime.calls.create_v3(...)` | `sdp`, `session`, optional `session_id`, `thread_id`, transport extensions | typed `RealtimeCallResponse` |
+| `client.realtime.sideband.connect(...)` | `call_id`, optional `session_id`, `timeout`, `extra_headers` | `RealtimeSidebandConnection` |
 
 `create_v3()` requires the effective model to be `gpt-live-1-codex` or
-`gpt-live-1-boulder-alpha`, removes any caller-supplied session ID, and applies
-the current Codex v3 intent/architecture. The result exposes `answer_sdp`,
-`call_id`, raw `session`, and original response text.
+`gpt-live-1-boulder-alpha`, removes any caller-supplied session ID, generates
+required backend correlation IDs when omitted, and applies the current Codex v3
+intent/architecture. The result exposes `answer_sdp`, `call_id`, raw `session`,
+and original response text. The sideband connection joins that call over
+ChatGPT OAuth and provides JSON `send()`, `recv()`, and `close()` methods.
 
 ## `client.codex`
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import uuid
 from collections.abc import Iterator
 from typing import Any, TYPE_CHECKING
 
@@ -247,18 +249,56 @@ class Responses:
             prompt_cache_retention=prompt_cache_retention,
         )
         normalized_tools = normalize_tools(tools)
+        normalized_input = (
+            []
+            if not _is_given(input) or input is None
+            else [normalize_input_item(item) for item in input]
+        )
+        normalized_input.append({"type": "compaction_trigger"})
+
+        installation_id = str(uuid.uuid4())
+        session_id = str(uuid.uuid4())
+        thread_id = str(uuid.uuid4())
+        turn_id = str(uuid.uuid4())
+        window_id = f"{thread_id}:1"
+        turn_metadata = json.dumps(
+            {
+                "installation_id": installation_id,
+                "session_id": session_id,
+                "thread_id": thread_id,
+                "turn_id": turn_id,
+                "window_id": window_id,
+                "request_kind": "compaction",
+                "compaction": {
+                    "trigger": "manual",
+                    "reason": "user_requested",
+                    "implementation": "responses_compaction_v2",
+                    "phase": "standalone_turn",
+                    "strategy": "memento",
+                },
+            },
+            separators=(",", ":"),
+        )
         payload = {
             "model": _default(model, self._client._defaults["model"]),
             "instructions": _default(instructions, self._client._defaults["instructions"]) or "",
-            "input": (
-                []
-                if not _is_given(input) or input is None
-                else [normalize_input_item(item) for item in input]
-            ),
+            "input": normalized_input,
             "tools": normalized_tools,
+            "tool_choice": "auto" if normalized_tools else "none",
             "parallel_tool_calls": (
                 bool(_default(parallel_tool_calls, False)) if normalized_tools else False
             ),
+            "store": False,
+            "stream": True,
+            "include": [],
+            "client_metadata": {
+                "x-codex-installation-id": installation_id,
+                "session_id": session_id,
+                "thread_id": thread_id,
+                "turn_id": turn_id,
+                "x-codex-window-id": window_id,
+                "x-codex-turn-metadata": turn_metadata,
+            },
         }
         if _is_given(reasoning) and reasoning is not None:
             payload["reasoning"] = normalize_reasoning(reasoning)
@@ -270,16 +310,56 @@ class Responses:
             payload["text"] = normalize_text(text)
         if extra_body:
             payload.update(_jsonable(extra_body))
-        data = self._client._post(
-            "/responses/compact",
+        if not isinstance(payload.get("input"), list):
+            raise TypeError("responses.compact() extra_body.input must be a list")
+        if not payload["input"] or payload["input"][-1].get("type") != "compaction_trigger":
+            payload["input"].append({"type": "compaction_trigger"})
+
+        headers = dict(extra_headers or {})
+        beta_features = [
+            value.strip()
+            for value in headers.get("x-codex-beta-features", "").split(",")
+            if value.strip()
+        ]
+        if "remote_compaction_v2" not in beta_features:
+            beta_features.append("remote_compaction_v2")
+        headers["x-codex-beta-features"] = ",".join(beta_features)
+        headers.setdefault("x-codex-window-id", window_id)
+        headers.setdefault("x-codex-turn-metadata", turn_metadata)
+
+        response = self._client._post(
+            "/responses",
             body=payload,
-            headers=extra_headers,
+            stream=True,
+            headers=headers,
             params=extra_query,
             timeout=timeout,
-        ).json()
+        )
+        output: list[Any] = []
+        completed: dict[str, Any] = {}
+        for event in stream_response_events(response):
+            if event.type == "response.output_item.done":
+                item = getattr(event, "item", None)
+                if isinstance(item, dict):
+                    output.append(item)
+            elif event.type == "response.completed":
+                completed_value = getattr(event, "response", None) or {}
+                completed = (
+                    completed_value
+                    if isinstance(completed_value, dict)
+                    else completed_value.model_dump()
+                )
+            elif event.type in {"response.failed", "error"}:
+                raise RuntimeError("Remote compaction v2 failed")
+
+        compaction_items = [item for item in output if item.get("type") == "compaction"]
+        if len(output) != 1 or len(compaction_items) != 1:
+            raise RuntimeError(
+                "Remote compaction v2 expected exactly one compaction output item, "
+                f"received {len(compaction_items)} from {len(output)} output items"
+            )
         return CompactedResponse(
-            id=data.get("id", ""),
-            object=data.get("object", "response.compacted"),
-            output=data.get("output", []),
-            usage=_usage_from_backend(data.get("usage")),
+            id=completed.get("id", ""),
+            output=compaction_items,
+            usage=_usage_from_backend(completed.get("usage")),
         )

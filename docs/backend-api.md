@@ -249,15 +249,18 @@ rate-limit and timing events, and left the connection reusable.
 
 ---
 
-### `POST /codex/responses/compact`
+### `POST /codex/responses` with `compaction_trigger`
 
 Compact a long conversation into an encrypted summary the model can still read.
+The retired `/responses/compact` v1 route now returns `404` on the Codex OAuth
+backend. The SDK preserves `client.responses.compact(...)` while using the
+explicit remote-compaction-v2 contract on the normal streaming Responses route.
 
 **Request body**:
 ```json
 {
   "model": "gpt-5.4",
-  "input": [ /* full conversation history */ ],
+  "input": [ /* full conversation history */, { "type": "compaction_trigger" } ],
   "instructions": "Compact the conversation.",
   "tools": [],
   "parallel_tool_calls": false,
@@ -268,19 +271,17 @@ Compact a long conversation into an encrypted summary the model can still read.
 }
 ```
 
-**Response** — synchronous JSON (not SSE):
+**Response** — SSE containing exactly one completed compaction item:
 ```json
 {
   "id": "resp_...",
   "output": [
-    { "type": "message", "role": "user", ... },
-    { "type": "compaction_summary", "encrypted_content": "..." },
-    ...
+    { "type": "compaction", "encrypted_content": "..." }
   ]
 }
 ```
 - `output` replaces the original history; pass it as `input` in subsequent calls.
-- The `compaction_summary` item is opaque on the client side.
+- The `compaction` item is opaque on the client side.
 
 **SDK method**: `client.responses.compact(...)`
 
@@ -319,17 +320,19 @@ on plan/account capabilities.
 
 Realtime audio/video call initiation.
 
-**SDK methods**: `client.realtime.calls.create(...)`,
-`client.realtime.calls.create_v3(...)`
+**SDK methods**: `client.realtime.calls.create_v3(...)` and
+`client.realtime.sideband.connect(...)`
 
 **Status**: Supported by the current Codex client over ChatGPT OAuth. The SDK
-follows the Codex client protocol:
+exposes the Realtime v3 frameless call directly:
 
-- plain SDP offer: `client.realtime.calls.create(sdp=offer_sdp)`
-- AVAS SDP offer plus session payload:
-  `client.realtime.calls.create(sdp=offer_sdp, session={...})`
-- Realtime v3 frameless call:
-  `client.realtime.calls.create_v3(sdp=offer_sdp, session={"model": "gpt-live-1-codex"})`
+```python
+call = client.realtime.calls.create_v3(
+    sdp=offer_sdp,
+    session={"model": "gpt-live-1-codex"},
+)
+sideband = client.realtime.sideband.connect(call_id=call.call_id)
+```
 
 For Realtime v3, Codex sends `openai-alpha: quicksilver=v2`, the AVAS query
 parameters `intent=quicksilver&architecture=avas`, and a `gpt-live` session.
@@ -367,27 +370,13 @@ command returned text plus encrypted continuation state successfully.
 
 ---
 
-### Realtime WebSocket helpers
+### Realtime v3 sideband
 
-The `codex-agent` realtime plugin uses OpenAI Realtime WebSocket sessions while
-sharing the Codex OAuth/token store.
-
-**SDK methods**:
-
-- `client.realtime_websocket_url(model="gpt-realtime-1.5")`
-- `client.realtime.websocket_headers(session_id="...")`
-
-The URL helper returns:
-
-```text
-wss://api.openai.com/v1/realtime?model=...
-```
-
-The headers helper returns `Authorization: Bearer <openai_api_key>`, the Codex
-originator, and the optional session id. Interactive ChatGPT OAuth attempts to
-exchange its fresh ID token for this Realtime API key and persists it when the
-account is entitled to one. If that exchange is unavailable, regular Codex OAuth
-continues to work but Voice v2 requires a separately provisioned API key.
+After creating a WebRTC call, `client.realtime.sideband.connect(...)` joins its
+JSON control/delegation channel at `/v1/live/{call_id}` with the current ChatGPT
+OAuth account. This transport is used for client-managed delegation events and
+context appends. The SDK intentionally does not expose the unrelated API-key
+Voice v2 WebSocket surface.
 
 ---
 

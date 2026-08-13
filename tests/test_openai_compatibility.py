@@ -18,10 +18,6 @@ from codex_backend_sdk.resources.files import Files
 from codex_backend_sdk.resources.models import Models
 from codex_backend_sdk.resources.openai_oauth import AudioTranscriptions, Embeddings
 from codex_backend_sdk.resources.responses import Responses
-from codex_backend_sdk.resources.realtime import RealtimeCalls
-
-
-_official_realtime_calls = OfficialOpenAI(api_key="compatibility-test").realtime.calls
 
 
 def _parameters(method):
@@ -40,7 +36,6 @@ def _parameters(method):
         ("images.edit", Images.edit, OpenAIImages.edit),
         ("embeddings.create", Embeddings.create, OpenAIEmbeddings.create),
         ("files.create", Files.create, OpenAIFiles.create),
-        ("realtime.calls.create", RealtimeCalls.create, _official_realtime_calls.create),
         (
             "audio.transcriptions.create",
             AudioTranscriptions.create,

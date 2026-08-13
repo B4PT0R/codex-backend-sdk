@@ -176,7 +176,7 @@ compacted = client.responses.compact(
 history = compacted.output
 ```
 
-Compaction summaries are opaque encrypted backend state. Replay them as input;
+Compaction items are opaque encrypted backend state. Replay them as input;
 do not parse or modify their contents.
 
 ### Call a function
@@ -474,14 +474,21 @@ print(answer.answer_sdp)
 
 Live probes confirmed `gpt-live-1-codex` and
 `gpt-live-1-boulder-alpha`. They are Codex Realtime v3 snapshots, not aliases
-for the public `gpt-realtime` family.
-
-Voice v2 WebSocket integrations can obtain their connection details separately:
+for the public `gpt-realtime` family. The call response exposes `call_id`; join
+its OAuth-authenticated control and delegation channel with:
 
 ```python
-url = client.realtime_websocket_url(model="gpt-realtime-1.5")
-headers = client.realtime.websocket_headers(session_id="voice-session")
+sideband = client.realtime.sideband.connect(
+    call_id=answer.call_id,
+    session_id="voice-session",
+)
+sideband.send({"type": "delegation.context.append", "content": []})
+event = sideband.recv()
+sideband.close()
 ```
+
+The SDK intentionally exposes only the ChatGPT-authenticated v3 transport. It
+does not retain the separately billed API-key Voice v2 WebSocket helpers.
 
 ### Embeddings
 

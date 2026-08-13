@@ -38,7 +38,7 @@ routes are classified.
 | `POST https://auth.openai.com/oauth/revoke` | `client.revoke`; `revoke_oauth_token` | contract; explicit destructive auth mutation |
 | `POST /backend-api/codex/responses` | `client.responses.create` | live |
 | `WSS /backend-api/codex/responses` | `client.responses.websocket.connect` | live; handshake metadata and completed reusable response observed |
-| `POST /backend-api/codex/responses/compact` | `client.responses.compact` | live |
+| `POST /backend-api/codex/responses` + `compaction_trigger` | `client.responses.compact` | live; remote compaction v2 |
 | `GET /backend-api/codex/models` | `client.models` | live |
 | `POST /backend-api/codex/realtime/calls` | `client.realtime.calls` | live |
 | `WSS /v1/realtime?model=...` | `client.realtime.connect` | live |

@@ -39,12 +39,19 @@ class FakeClient(OpenAI):
 
     def _post(self, path, *, body, stream=False, **options):
         self.posts.append((path, body, stream, options))
-        if path == "/responses/compact":
-            return FakeJSONResponse({
-                "id": "resp_123",
-                "output": [{"type": "message", "content": []}],
-                "usage": {"input_tokens": 11, "output_tokens": 7, "total_tokens": 18},
-            })
+        if body.get("input", [])[-1:] == [{"type": "compaction_trigger"}]:
+            return FakeSSE([
+                (
+                    'data: {"type":"response.output_item.done","item":'
+                    '{"type":"compaction","encrypted_content":"opaque"}}'
+                ),
+                "",
+                (
+                    'data: {"type":"response.completed","response":'
+                    '{"id":"resp_123","model":"gpt-test",'
+                    '"usage":{"input_tokens":11,"output_tokens":7,"total_tokens":18}}}'
+                ),
+            ])
         return FakeSSE([
             'data: {"type":"response.content_part.delta","delta":{"text":"hel"}}',
             "",
@@ -143,6 +150,27 @@ def test_responses_create_collects_to_pydantic_response():
     assert payload["reasoning"] == {"effort": "low", "summary": "auto"}
     assert payload["text"] == {"verbosity": "low"}
 
+
+def test_responses_create_strips_local_message_fields():
+    client = FakeClient()
+
+    client.responses.create(input=[{
+        "type": "message",
+        "role": "developer",
+        "content": "Temporary skill instructions.",
+        "kind": "skill",
+        "call_id": "local-call-id",
+    }])
+
+    message = client.posts[0][1]["input"][0]
+    assert message == {
+        "type": "message",
+        "role": "developer",
+        "content": [{
+            "type": "input_text",
+            "text": "Temporary skill instructions.",
+        }],
+    }
 
 def test_response_exposes_tool_calls_and_reasoning_summary():
     response = Response(
@@ -343,25 +371,33 @@ def test_responses_compact_sends_shared_request_fields():
     assert compacted.usage.output_tokens == 7
     assert compacted.usage.total_tokens == 18
     path, payload, stream, _ = client.posts[0]
-    assert path == "/responses/compact"
-    assert stream is False
-    assert payload == {
-        "model": "gpt-test",
-        "instructions": "Compact this.",
-        "input": [
-            {
-                "type": "message",
-                "role": "user",
-                "content": [{"type": "input_text", "text": "Long context"}],
-            }
-        ],
-        "tools": [{"type": "web_search"}],
-        "parallel_tool_calls": True,
-        "reasoning": {"effort": "medium"},
-        "service_tier": "priority",
-        "prompt_cache_key": "cache-key",
-        "text": {"verbosity": "low"},
-    }
+    assert path == "/responses"
+    assert stream is True
+    assert payload["input"] == [
+        {
+            "type": "message",
+            "role": "user",
+            "content": [{"type": "input_text", "text": "Long context"}],
+        },
+        {"type": "compaction_trigger"},
+    ]
+    assert payload["tools"] == [{"type": "web_search"}]
+    assert payload["tool_choice"] == "auto"
+    assert payload["parallel_tool_calls"] is True
+    assert payload["reasoning"] == {"effort": "medium"}
+    assert payload["service_tier"] == "priority"
+    assert payload["prompt_cache_key"] == "cache-key"
+    assert payload["text"] == {"verbosity": "low"}
+    assert payload["store"] is False
+    assert payload["stream"] is True
+    assert payload["include"] == []
+    assert payload["client_metadata"]["session_id"]
+    turn_metadata = payload["client_metadata"]["x-codex-turn-metadata"]
+    assert '"implementation":"responses_compaction_v2"' in turn_metadata
+    options = client.posts[0][3]
+    assert options["headers"]["x-codex-beta-features"] == "remote_compaction_v2"
+    assert options["headers"]["x-codex-turn-metadata"] == turn_metadata
+    assert compacted.output == [{"type": "compaction", "encrypted_content": "opaque"}]
 
 
 def test_responses_create_rejects_official_params_not_exposed_by_codex_backend():

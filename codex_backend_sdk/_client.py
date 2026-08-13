@@ -616,11 +616,4 @@ class CodexClient:
             **kwargs,
         )
 
-    def realtime_websocket_url(self, *, model: str) -> str:
-        """Return the official OpenAI Realtime WebSocket URL for Codex plugins."""
-        if not model:
-            raise ValueError(f"Expected a non-empty value for `model` but received {model!r}")
-        return "wss://api.openai.com/v1/realtime?" + urllib.parse.urlencode({"model": model})
-
-
 OpenAI = CodexClient

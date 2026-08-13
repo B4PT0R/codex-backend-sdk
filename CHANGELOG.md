@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [0.5.0] - 2026-08-13
+
+### Added
+- Added an OAuth-authenticated Realtime v3 sideband connection for client-managed delegation and control events.
+
+### Changed
+- Made Realtime explicitly v3-only: `create_v3()` now owns the complete Codex call contract, while the separately billed API-key Voice v2 helpers were removed.
+- Migrated `client.responses.compact(...)` from the retired `/responses/compact`
+  route to explicit remote compaction v2 over `/responses`, preserving the
+  public SDK surface.
+
+### Fixed
+- Added the required `session-id` and `thread-id` headers to Realtime v3 call creation, generating fresh UUIDs unless callers provide stable correlation IDs.
+- Preserved backend-reported prompt-cache write tokens in Responses usage.
+- Added the remote-compaction-v2 trigger, beta feature, request metadata, SSE
+  collection, output validation, and token-usage handling required by the
+  current Codex OAuth backend.
+
 ## [0.4.0] - 2026-08-10
 
 ### Added

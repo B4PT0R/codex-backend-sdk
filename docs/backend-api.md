@@ -271,7 +271,7 @@ explicit remote-compaction-v2 contract on the normal streaming Responses route.
 }
 ```
 
-**Response** — SSE containing exactly one completed compaction item:
+**Response** — SSE currently observed with exactly one completed compaction item:
 ```json
 {
   "id": "resp_...",
@@ -281,6 +281,8 @@ explicit remote-compaction-v2 contract on the normal streaming Responses route.
 }
 ```
 - `output` replaces the original history; pass it as `input` in subsequent calls.
+- The SDK preserves any additional nonopaque output items in their emitted order
+  while still requiring exactly one opaque compaction anchor.
 - The `compaction` item is opaque on the client side.
 
 **SDK method**: `client.responses.compact(...)`

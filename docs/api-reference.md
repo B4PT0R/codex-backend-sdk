@@ -139,10 +139,13 @@ instance. Streaming is not exposed by `parse()`.
 | `text` | object or unset | Text verbosity/format controls. |
 | `tools`, `tool_choice` | JSON-compatible | Tool context retained during compaction. |
 | `parallel_tool_calls`, `prompt_cache_key`, `service_tier` | optional | Forwarded when supplied. |
-Returns `CompactedResponse`. Its `output` contains the single opaque encrypted
-`compaction` item returned by explicit remote compaction v2; `usage` preserves
-backend token accounting. The public helper remains stable even though the
-backend transport moved from `/responses/compact` to `/responses`.
+Returns `CompactedResponse`. Its ordered `output` preserves every item emitted
+by explicit remote compaction v2 and must contain exactly one opaque encrypted
+`compaction` item; `usage` preserves backend token accounting. The current
+backend normally emits only that anchor, but the SDK also retains any nonopaque
+items a future or model-dependent response may carry. The public helper remains
+stable even though the backend transport moved from `/responses/compact` to
+`/responses`.
 
 #### `client.responses.websocket`
 

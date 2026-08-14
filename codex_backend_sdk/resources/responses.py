@@ -353,13 +353,13 @@ class Responses:
                 raise RuntimeError("Remote compaction v2 failed")
 
         compaction_items = [item for item in output if item.get("type") == "compaction"]
-        if len(output) != 1 or len(compaction_items) != 1:
+        if len(compaction_items) != 1:
             raise RuntimeError(
-                "Remote compaction v2 expected exactly one compaction output item, "
+                "Remote compaction v2 expected one compaction output item, "
                 f"received {len(compaction_items)} from {len(output)} output items"
             )
         return CompactedResponse(
             id=completed.get("id", ""),
-            output=compaction_items,
+            output=output,
             usage=_usage_from_backend(completed.get("usage")),
         )

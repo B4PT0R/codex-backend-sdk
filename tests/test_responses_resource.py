@@ -400,6 +400,43 @@ def test_responses_compact_sends_shared_request_fields():
     assert compacted.output == [{"type": "compaction", "encrypted_content": "opaque"}]
 
 
+def test_responses_compact_preserves_nonopaque_output_items_in_backend_order():
+    class PreservingFakeClient(FakeClient):
+        def _post(self, path, *, body, stream=False, **options):
+            self.posts.append((path, body, stream, options))
+            return FakeSSE([
+                (
+                    'data: {"type":"response.output_item.done","item":'
+                    '{"type":"message","role":"assistant","content":'
+                    '[{"type":"output_text","text":"Recent work"}]}}'
+                ),
+                "",
+                (
+                    'data: {"type":"response.output_item.done","item":'
+                    '{"type":"compaction","encrypted_content":"opaque"}}'
+                ),
+                "",
+                (
+                    'data: {"type":"response.completed","response":'
+                    '{"id":"resp_preserved","model":"gpt-test",'
+                    '"usage":{"input_tokens":11,"output_tokens":7,"total_tokens":18}}}'
+                ),
+            ])
+
+    compacted = PreservingFakeClient().responses.compact(
+        input=[{"role": "user", "content": "Long context"}],
+    )
+
+    assert compacted.output == [
+        {
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "Recent work"}],
+        },
+        {"type": "compaction", "encrypted_content": "opaque"},
+    ]
+
+
 def test_responses_create_rejects_official_params_not_exposed_by_codex_backend():
     client = FakeClient()
 

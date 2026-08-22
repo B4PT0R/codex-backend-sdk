@@ -17,7 +17,7 @@ Quickstart:
     print(response.output_text)
 """
 
-__version__ = "0.5.1"
+__version__ = "0.5.2"
 
 from .oauth import (
     DeviceCode,
@@ -32,6 +32,7 @@ from .resources.remote_control import (
     RemoteControlClient,
     RemoteControlClientPage,
     RemoteControlConnection,
+    RemoteControlConnectionClosed,
     RemoteControlDesktop,
     RemoteControlEnrollment,
     RemoteControlEnvironment,
@@ -120,6 +121,7 @@ __all__ = [
     "RemoteControlClient",
     "RemoteControlClientPage",
     "RemoteControlConnection",
+    "RemoteControlConnectionClosed",
     "RemoteControlDesktop",
     "RemoteControlEnrollment",
     "RemoteControlEnvironment",

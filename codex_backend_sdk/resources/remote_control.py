@@ -19,6 +19,10 @@ if TYPE_CHECKING:
 REMOTE_CONTROL_ROOT = "/wham/remote/control"
 
 
+class RemoteControlConnectionClosed(ConnectionError):
+    """The Remote Control peer closed its WebSocket without an envelope."""
+
+
 class RemoteControlEnrollment(CodexBaseModel):
     server_id: str
     environment_id: str
@@ -117,8 +121,16 @@ class RemoteControlConnection:
             raise TypeError("Expected `envelope` to serialize to a JSON object.")
         self._socket.send(json.dumps(payload, separators=(",", ":")))
 
+    def ping(self, payload: bytes = b"") -> None:
+        """Send a WebSocket ping frame to keep the remote path alive."""
+        self._socket.ping(payload)
+
     def receive(self) -> dict[str, Any]:
         message = self._socket.recv()
+        if message in {"", b""}:
+            raise RemoteControlConnectionClosed(
+                "Remote Control WebSocket closed without a final envelope."
+            )
         if isinstance(message, bytes):
             message = message.decode("utf-8")
         payload = json.loads(message)

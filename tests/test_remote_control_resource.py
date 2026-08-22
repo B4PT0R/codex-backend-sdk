@@ -3,13 +3,18 @@ import json
 import pytest
 
 from codex_backend_sdk import OpenAI
-from codex_backend_sdk.resources.remote_control import RemoteControlEnrollment
+from codex_backend_sdk.resources.remote_control import (
+    RemoteControlConnection,
+    RemoteControlConnectionClosed,
+    RemoteControlEnrollment,
+)
 
 
 class FakeSocket:
     def __init__(self):
         self.connected = True
         self.sent = []
+        self.pings = []
         self.received = [json.dumps({"type": "ping", "cursor": "cursor-2"})]
 
     def send(self, message):
@@ -17,6 +22,9 @@ class FakeSocket:
 
     def recv(self):
         return self.received.pop(0)
+
+    def ping(self, payload=b""):
+        self.pings.append(payload)
 
     def close(self):
         self.connected = False
@@ -277,6 +285,7 @@ def test_remote_control_connection_builds_codex_headers_and_tracks_cursor():
         websocket_factory=factory,
     )
     connection.send({"type": "ack", "client_id": "client-1"})
+    connection.ping(b"heartbeat")
     received = connection.receive()
     connection.close()
 
@@ -287,6 +296,25 @@ def test_remote_control_connection_builds_codex_headers_and_tracks_cursor():
     assert "Authorization: Bearer remote-token" in headers
     assert "x-codex-subscribe-cursor: cursor-1" in headers
     assert json.loads(socket.sent[0]) == {"type": "ack", "client_id": "client-1"}
+    assert socket.pings == [b"heartbeat"]
     assert received["type"] == "ping"
     assert connection.subscribe_cursor == "cursor-2"
     assert connection.connected is False
+
+
+@pytest.mark.parametrize("closed_frame", ["", b""])
+def test_remote_control_connection_reports_an_empty_close_frame(closed_frame):
+    socket = FakeSocket()
+    socket.received = [closed_frame]
+    connection = RemoteControlConnection(
+        socket,
+        websocket_url="wss://example.test/remote",
+        enrollment=enrollment(),
+        installation_id="installation-1",
+        server_name="Desktop",
+        protocol_version="3",
+        subscribe_cursor="stale-cursor",
+    )
+
+    with pytest.raises(RemoteControlConnectionClosed, match="closed without"):
+        connection.receive()

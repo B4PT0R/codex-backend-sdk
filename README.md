@@ -36,7 +36,7 @@ from codex_backend_sdk import OpenAI
 client = OpenAI().authenticate()
 
 response = client.responses.create(
-    model="gpt-5.4",
+    model="gpt-5.5",
     input="Explain quicksort in one paragraph.",
 )
 
@@ -60,7 +60,8 @@ client.files           # upload files for Apps/MCP parameters
 client.images          # Codex-backed image generation and editing
 client.audio           # ChatGPT-backed transcription
 client.embeddings      # OpenAI embeddings endpoint through OAuth
-client.realtime        # WebRTC call creation and Realtime connection headers
+client.live            # OpenAI-shaped GPT-Live creation and sideband attachment
+client.realtime        # additive low-level Codex Realtime v3 transport
 ```
 
 These resources follow `openai-python` conventions where the backend overlaps
@@ -113,7 +114,7 @@ dictionaries or raw streams when imposing a stable model would be misleading.
 
 ```python
 response = client.responses.create(
-    model="gpt-5.4",
+    model="gpt-5.5",
     instructions="Be concise.",
     input="Summarize the CAP theorem.",
     reasoning={"effort": "medium", "summary": "auto"},
@@ -144,7 +145,7 @@ connection reusable across sequential turns:
 
 ```python
 with client.responses.websocket.connect() as ws:
-    for event in ws.create({"model": "gpt-5.4", "input": "Say hello."}):
+    for event in ws.create({"model": "gpt-5.5", "input": "Say hello."}):
         if event.get("type") == "response.output_text.delta":
             print(event.get("delta", ""), end="")
 ```
@@ -168,7 +169,7 @@ print(client.responses.create(input=history).output_text)
 
 ```python
 compacted = client.responses.compact(
-    model="gpt-5.4",
+    model="gpt-5.5",
     instructions="Preserve task-critical decisions and unresolved work.",
     input=history,
 )
@@ -239,7 +240,7 @@ print(result.output_parsed)
 for model in client.models.list():
     print(model.id, model.context_window, model.supported_reasoning_levels)
 
-model = client.models.retrieve("gpt-5.4")
+model = client.models.retrieve("gpt-5.5")
 ```
 
 ### Upload a file
@@ -311,6 +312,10 @@ sports, and time commands. See the API reference for command validation.
 quota = client.codex.usage()
 daily = client.codex.usage_details.daily_token_breakdown()
 credits = client.codex.usage_details.credit_events()
+plugin_metrics = client.codex.usage_details.plugin_usage_metrics(
+    start_date="2026-09-01",
+    end_date="2026-09-18",
+)
 
 print(quota.get("rate_limit", {}).get("primary_window"))
 ```
@@ -414,6 +419,7 @@ tool annotations and own user confirmation; the SDK never auto-invokes tools.
 plugins = client.chatgpt.plugins.list_all(scope="GLOBAL")
 installed = client.chatgpt.plugins.installed_all()
 suggested = client.chatgpt.plugins.suggested()
+home = client.chatgpt.plugins.home()
 skill = client.chatgpt.plugins.skill("plugins~...", "skill-name")
 
 checkout = client.chatgpt.plugins.bundles.extract_plugin(
@@ -462,33 +468,42 @@ return a typed in-memory object, bytes, `BytesIO`, a data URI, or a file path.
 ### Realtime voice
 
 ```python
-answer = client.realtime.calls.create_v3(
-    sdp=offer_sdp,
+live = client.live.create(
     session={
         "model": "gpt-live-1-codex",
         "instructions": "Speak naturally and stay concise.",
+        "delegation": {"type": "client"},
     },
+    transport={"type": "webrtc", "sdp": offer_sdp},
 )
-print(answer.answer_sdp)
+apply_remote_sdp(live.transport.sdp)
+
+with client.live.sideband.connect(session_id=live.session.id) as sideband:
+    for event in sideband:
+        print(event.type)
 ```
 
 Live probes confirmed `gpt-live-1-codex` and
 `gpt-live-1-boulder-alpha`. They are Codex Realtime v3 snapshots, not aliases
-for the public `gpt-realtime` family. The call response exposes `call_id`; join
-its OAuth-authenticated control and delegation channel with:
+for the public `gpt-live-1` model. `client.live` follows the current
+`openai-python` creation, response, and sideband idioms while adapting them to
+the ChatGPT OAuth call transport.
+
+The earlier low-level surface remains available for backend-specific code:
 
 ```python
-sideband = client.realtime.sideband.connect(
-    call_id=answer.call_id,
-    session_id="voice-session",
+answer = client.realtime.calls.create_v3(
+    sdp=offer_sdp,
+    session={"model": "gpt-live-1-codex"},
 )
-sideband.send({"type": "delegation.context.append", "content": []})
-event = sideband.recv()
-sideband.close()
+with client.realtime.sideband.connect(call_id=answer.call_id) as sideband:
+    sideband.send({"type": "session.close"})
 ```
 
-The SDK intentionally exposes only the ChatGPT-authenticated v3 transport. It
-does not retain the separately billed API-key Voice v2 WebSocket helpers.
+The OAuth backend's event dialect is still experimental and is exposed
+forward-compatibly through `LiveEvent` rather than rewritten into invented
+public fields. The public primary `client.live.connect()` WebSocket is not
+available through ChatGPT OAuth; use WebRTC plus the attached sideband.
 
 ### Embeddings
 

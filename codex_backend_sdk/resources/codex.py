@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import mimetypes
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .._models import (
     ConsumeRateLimitResetCreditResponse,
@@ -73,6 +73,161 @@ class CodexUsageDetails:
         return self._client._post_wham(
             "/wham/usage/thread_usage/query", body={"thread_ids": thread_ids}
         )
+
+    def workspace_token_usage(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        breakdown_by: str | None = None,
+        modes: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Return workspace token usage for an inclusive UTC date range."""
+        params = self._date_range(start_date, end_date)
+        params["group_by"] = "day"
+        if breakdown_by is not None:
+            params["breakdown_by"] = self._required(breakdown_by, "breakdown_by")
+        if modes is not None:
+            if not modes or any(not mode for mode in modes):
+                raise ValueError("Expected `modes` to contain non-empty values.")
+            params["modes"] = modes
+        return self._client._get_wham(
+            "/wham/usage/daily-workspace-user-token-usage-breakdown",
+            params=params,
+        )
+
+    def workspace_credit_usage(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        breakdown: str,
+    ) -> dict[str, Any]:
+        """Return Enterprise workspace credit usage grouped by a backend dimension."""
+        params = self._date_range(start_date, end_date)
+        params["breakdown"] = self._required(breakdown, "breakdown")
+        return self._client._get_wham(
+            "/wham/usage/daily-workspace-user-credit-usage",
+            params=params,
+        )
+
+    def workspace_usage_counts(
+        self, *, start_date: str, end_date: str
+    ) -> dict[str, Any]:
+        return self._workspace_analytics(
+            "/wham/analytics/daily-workspace-usage-counts",
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    def plugin_usage_metrics(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        limit: int = 10,
+    ) -> dict[str, Any]:
+        return self._workspace_analytics(
+            "/wham/analytics/daily-plugin-usage-metrics",
+            start_date=start_date,
+            end_date=end_date,
+            top_plugin_limit=self._positive(limit, "limit"),
+        )
+
+    def skill_usage_metrics(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        limit: int = 10,
+    ) -> dict[str, Any]:
+        return self._workspace_analytics(
+            "/wham/analytics/daily-skill-usage-metrics",
+            start_date=start_date,
+            end_date=end_date,
+            top_skill_limit=self._positive(limit, "limit"),
+        )
+
+    def task_usage(self, threads: list[dict[str, Any]]) -> dict[str, Any]:
+        """Query usage for up to 100 disjoint task roots and their descendants."""
+        payload = _jsonable(threads)
+        if not isinstance(payload, list) or not payload or len(payload) > 100:
+            raise ValueError("Expected `threads` to contain between 1 and 100 tasks.")
+        ids: set[str] = set()
+        for thread in payload:
+            if not isinstance(thread, dict):
+                raise TypeError("Expected every task usage entry to be a JSON object.")
+            thread_id = thread.get("thread_id")
+            descendants = thread.get("descendant_thread_ids", [])
+            if (
+                not isinstance(thread_id, str)
+                or not thread_id
+                or not isinstance(descendants, list)
+                or any(not isinstance(value, str) or not value for value in descendants)
+            ):
+                raise ValueError(
+                    "Task usage entries require non-empty thread identifiers."
+                )
+            for value in [thread_id, *descendants]:
+                if value in ids:
+                    raise ValueError("Task usage thread identifiers must be disjoint.")
+                ids.add(value)
+        if len(ids) > 1_000:
+            raise ValueError("Expected at most 1,000 total task thread identifiers.")
+        return self._client._post_wham(
+            "/wham/usage/thread_usage/query_v2", body={"threads": payload}
+        )
+
+    def turn_estimates(self, threads: dict[str, list[str]]) -> dict[str, Any]:
+        """Query per-turn estimates and settled response IDs."""
+        if not threads:
+            raise ValueError("Expected `threads` to contain at least one thread.")
+        items = []
+        for thread_id, turn_ids in threads.items():
+            if not thread_id or not turn_ids or any(not value for value in turn_ids):
+                raise ValueError("Expected non-empty thread and turn identifiers.")
+            items.append({"thread_id": thread_id, "turn_ids": list(turn_ids)})
+        return self._client._post_wham(
+            "/wham/usage/thread-estimates/query",
+            body={"threads": items, "include_settled_response_ids": True},
+        )
+
+    def _workspace_analytics(
+        self,
+        path: str,
+        *,
+        start_date: str,
+        end_date: str,
+        **extra: Any,
+    ) -> dict[str, Any]:
+        return self._client._get_wham(
+            path,
+            params={
+                **self._date_range(start_date, end_date),
+                "group_by": "day",
+                "workspace_user": True,
+                **extra,
+            },
+        )
+
+    @classmethod
+    def _date_range(cls, start_date: str, end_date: str) -> dict[str, str]:
+        return {
+            "start_date": cls._required(start_date, "start_date"),
+            "end_date": cls._required(end_date, "end_date"),
+        }
+
+    @staticmethod
+    def _required(value: str, name: str) -> str:
+        if not value:
+            raise ValueError(f"Expected a non-empty value for `{name}`.")
+        return value
+
+    @staticmethod
+    def _positive(value: int, name: str) -> int:
+        if value < 1:
+            raise ValueError(f"Expected `{name}` to be positive.")
+        return value
 
 
 class CodexProfile:
@@ -159,6 +314,15 @@ class CodexRateLimitResetCredits:
             ).json()
         )
 
+    def history(self, *, cursor: str | None = None) -> dict[str, Any]:
+        """Return the paginated 30-day history of banked reset events."""
+        if cursor == "":
+            raise ValueError("Expected `cursor` to be non-empty when provided.")
+        return self._client._get_wham(
+            "/wham/rate-limit-reset-credits/history",
+            params=None if cursor is None else {"cursor": cursor},
+        )
+
 
 class CodexMemories:
     """ChatGPT memory data for the authenticated account."""
@@ -177,7 +341,9 @@ class CodexMemories:
         reasoning: Any = None,
     ) -> MemorySummarizeResponse:
         if not model:
-            raise ValueError(f"Expected a non-empty value for `model` but received {model!r}")
+            raise ValueError(
+                f"Expected a non-empty value for `model` but received {model!r}"
+            )
         payload: dict[str, Any] = {"model": model, "traces": _jsonable(traces)}
         if reasoning is not None:
             payload["reasoning"] = _jsonable(reasoning)
@@ -228,17 +394,21 @@ class CodexTasks:
         task_filter: str | None = None,
         environment_id: str | None = None,
     ) -> dict[str, Any]:
-        params = _clean_params({
-            "limit": limit,
-            "cursor": cursor,
-            "task_filter": task_filter,
-            "environment_id": environment_id,
-        })
+        params = _clean_params(
+            {
+                "limit": limit,
+                "cursor": cursor,
+                "task_filter": task_filter,
+                "environment_id": environment_id,
+            }
+        )
         return self._client._get_wham("/wham/tasks/list", params=params or None)
 
     def retrieve(self, task_id: str) -> dict[str, Any]:
         if not task_id:
-            raise ValueError(f"Expected a non-empty value for `task_id` but received {task_id!r}")
+            raise ValueError(
+                f"Expected a non-empty value for `task_id` but received {task_id!r}"
+            )
         return self._client._get_wham(f"/wham/tasks/{task_id}")
 
     def create(self, body: Any) -> dict[str, Any]:
@@ -261,7 +431,9 @@ class CodexTasks:
 
     def _post_action(self, task_id: str, action: str) -> dict[str, Any]:
         if not task_id:
-            raise ValueError(f"Expected a non-empty value for `task_id` but received {task_id!r}")
+            raise ValueError(
+                f"Expected a non-empty value for `task_id` but received {task_id!r}"
+            )
         return self._client._post_wham(f"/wham/tasks/{task_id}/{action}")
 
 
@@ -273,15 +445,23 @@ class CodexTaskTurns:
 
     def list(self, task_id: str) -> dict[str, Any]:
         if not task_id:
-            raise ValueError(f"Expected a non-empty value for `task_id` but received {task_id!r}")
+            raise ValueError(
+                f"Expected a non-empty value for `task_id` but received {task_id!r}"
+            )
         return self._client._get_wham(f"/wham/tasks/{task_id}/turns")
 
     def sibling_turns(self, task_id: str, turn_id: str) -> dict[str, Any]:
         if not task_id:
-            raise ValueError(f"Expected a non-empty value for `task_id` but received {task_id!r}")
+            raise ValueError(
+                f"Expected a non-empty value for `task_id` but received {task_id!r}"
+            )
         if not turn_id:
-            raise ValueError(f"Expected a non-empty value for `turn_id` but received {turn_id!r}")
-        return self._client._get_wham(f"/wham/tasks/{task_id}/turns/{turn_id}/sibling_turns")
+            raise ValueError(
+                f"Expected a non-empty value for `turn_id` but received {turn_id!r}"
+            )
+        return self._client._get_wham(
+            f"/wham/tasks/{task_id}/turns/{turn_id}/sibling_turns"
+        )
 
     def retrieve(self, task_id: str, turn_id: str) -> dict[str, Any]:
         task_id, turn_id = self._ids(task_id, turn_id)
@@ -303,9 +483,13 @@ class CodexTaskTurns:
     @staticmethod
     def _ids(task_id: str, turn_id: str) -> tuple[str, str]:
         if not task_id:
-            raise ValueError(f"Expected a non-empty value for `task_id` but received {task_id!r}")
+            raise ValueError(
+                f"Expected a non-empty value for `task_id` but received {task_id!r}"
+            )
         if not turn_id:
-            raise ValueError(f"Expected a non-empty value for `turn_id` but received {turn_id!r}")
+            raise ValueError(
+                f"Expected a non-empty value for `turn_id` but received {turn_id!r}"
+            )
         return task_id, turn_id
 
 
@@ -327,7 +511,9 @@ class CodexEnvironments:
     ) -> dict[str, Any]:
         return self._client._get_wham(
             "/wham/environments/search",
-            params=_clean_params({"query": query or None, "cursor": cursor, "limit": limit}),
+            params=_clean_params(
+                {"query": query or None, "cursor": cursor, "limit": limit}
+            ),
         )
 
     def retrieve(self, environment_id: str) -> dict[str, Any]:
@@ -409,14 +595,18 @@ class CodexRepositories:
     ) -> dict[str, Any]:
         if not repo_id or not query:
             raise ValueError("`repo_id` and `query` must be non-empty.")
-        normalized_id = repo_id if repo_id.startswith("github-") else f"github-{repo_id}"
+        normalized_id = (
+            repo_id if repo_id.startswith("github-") else f"github-{repo_id}"
+        )
         return self._client._get_wham(
             f"/wham/github/branches/{normalized_id}/search",
-            params=_clean_params({
-                "query": query,
-                "page_size": page_size,
-                "cursor": cursor,
-            }),
+            params=_clean_params(
+                {
+                    "query": query,
+                    "page_size": page_size,
+                    "cursor": cursor,
+                }
+            ),
         )
 
 

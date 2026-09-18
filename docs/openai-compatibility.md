@@ -7,7 +7,7 @@ input conventions, request options, defaults, and observable result shape.
 Backend-only helpers and optional parameters may be added, but must not change
 the meaning of the official subset.
 
-This matrix was audited against `openai-python` **2.53.0**. The development
+This matrix was audited against `openai-python` **3.16.1**. The development
 dependency and `tests/test_openai_compatibility.py` ensure that a newer official
 parameter cannot disappear silently from the backend client surface.
 
@@ -24,7 +24,8 @@ parameter cannot disappear silently from the backend client surface.
 | `images.generate` | Official signature preserved | GPT Image generation returns OpenAI-shaped base64 results | Codex always returns non-streamed PNG/base64 output; format/compression and Platform user attribution are unavailable |
 | `images.edit` | Official signature preserved | Single/multiple file inputs, URLs, data URLs, reference objects, and masks are normalized to Codex JSON | A mask targets the first image; `file_id` is contract-derived but not live-verified; Codex returns non-streamed PNG/base64 output |
 | `files.create` | Official signature is present | Not callable with Codex OAuth | Live probe returned missing `api.files.write`; the method raises a scope-specific unsupported error |
-| `realtime.calls.create` | Official WebRTC call-creation parameters preserved | SDP and session payloads use the OpenAI endpoint with OAuth | Codex-only Realtime v3 remains an additive method |
+| `live.create` | Official `session`, `transport`, and request-option signature preserved | Returns `response.session.id` and `response.transport.sdp` | The session ID is the OAuth backend's call ID; only WebRTC and confirmed Codex `gpt-live` snapshots are accepted |
+| `live.sideband.connect` | Official keyword surface and lazy context-manager idiom preserved | Queues pre-connect sends, yields attribute-access events, and closes deterministically | Automatic reconnection and the public primary `live.connect()` socket are unavailable through ChatGPT OAuth |
 
 The response models also preserve the common access idioms: nested response and
 stream values support both mapping and attribute access, image results use the
@@ -40,10 +41,16 @@ capabilities rather than developer API equivalents:
 - `client.chatgpt.*`
 - `client.files.upload(path)` for ChatGPT/Codex Apps signed-storage uploads
 - `client.realtime.calls.create_v3(...)`
+- `client.realtime.sideband.connect(...)`
 - `client.responses.websocket`
 
 The official SDK's newer reconnecting `responses.connect()` manager is not
 claimed as equivalent to the additive low-level WebSocket connection yet.
+
+The public GPT-Live protocol and the Codex OAuth snapshot do not always use the
+same event names. `client.live` preserves the backend event envelope as a
+forward-compatible `LiveEvent`; it does not synthesize timestamps or rename
+events when the backend supplied no equivalent public field.
 
 ## Image input normalization
 

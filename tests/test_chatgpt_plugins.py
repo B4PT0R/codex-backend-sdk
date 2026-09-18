@@ -19,7 +19,7 @@ class FakePluginsClient(OpenAI):
 
     def _request_chatgpt(self, method, path, **kwargs):
         self.calls.append((method, path, kwargs))
-        enabled = path.endswith("/install")
+        enabled = path.endswith(("/install", "/enable"))
         plugin_id = path.split("/")[-2]
         return FakeResponse({"id": plugin_id, "enabled": enabled})
 
@@ -40,8 +40,13 @@ def test_plugin_feeds_match_official_codex_routes():
     }
 
     assert client.chatgpt.plugins.featured() == ["github", "google-drive"]
-    assert client.chatgpt.plugins.featured(platform="chat") == ["github", "google-drive"]
-    assert client.chatgpt.plugins.curated_export()["download_url"].endswith("plugins.zip")
+    assert client.chatgpt.plugins.featured(platform="chat") == [
+        "github",
+        "google-drive",
+    ]
+    assert client.chatgpt.plugins.curated_export()["download_url"].endswith(
+        "plugins.zip"
+    )
     assert client.calls == [
         ("GET", "/plugins/featured", {"platform": "codex"}, None),
         ("GET", "/plugins/featured", {"platform": "chat"}, None),
@@ -62,13 +67,17 @@ def test_plugin_feeds_validate_private_response_boundaries():
 
 def test_remote_plugin_catalog_search_and_detail_match_current_codex_contract():
     client = FakePluginsClient()
-    page = {"plugins": [{"id": "plugins~linear"}], "pagination": {"next_page_token": None}}
+    page = {
+        "plugins": [{"id": "plugins~linear"}],
+        "pagination": {"next_page_token": None},
+    }
     client.payloads = {
         "/ps/plugins/list": page,
         "/ps/plugins/search": page,
         "/ps/plugins/installed": page,
         "/ps/plugins/workspace/shared": page,
-        "/ps/plugins/suggested": {"enabled": True, "plugins": []},
+        "/ps/plugins/home": {"sections": []},
+        "/ps/plugins/suggested/codex": {"enabled": True, "plugins": []},
         "/ps/plugins/plugins~linear": {"id": "plugins~linear"},
         "/ps/plugins/plugins~linear/skills/create-issue": {
             "plugin_id": "plugins~linear",
@@ -79,11 +88,12 @@ def test_remote_plugin_catalog_search_and_detail_match_current_codex_contract():
     plugins = client.chatgpt.plugins
 
     assert plugins.list()["plugins"][0]["id"] == "plugins~linear"
-    assert plugins.search(
-        "linear & docs/+", scope="GLOBAL", page_token="next page/+"
-    )["plugins"]
+    assert plugins.search("linear & docs/+", scope="GLOBAL", page_token="next page/+")[
+        "plugins"
+    ]
     assert plugins.installed(include_download_urls=True)["plugins"]
     assert plugins.workspace_shared()["plugins"]
+    assert plugins.home()["sections"] == []
     assert plugins.suggested()["enabled"] is True
     assert plugins.retrieve("plugins~linear", include_download_urls=True)["id"] == (
         "plugins~linear"
@@ -125,7 +135,13 @@ def test_remote_plugin_catalog_search_and_detail_match_current_codex_contract():
         ),
         (
             "GET",
-            "/ps/plugins/suggested",
+            "/ps/plugins/home",
+            None,
+            headers,
+        ),
+        (
+            "GET",
+            "/ps/plugins/suggested/codex",
             {"scope": "GLOBAL"},
             headers,
         ),
@@ -146,10 +162,12 @@ def test_remote_plugin_catalog_search_and_detail_match_current_codex_contract():
 
 def test_remote_plugin_catalog_pagination_and_cycle_detection():
     client = FakePluginsClient()
-    pages = iter([
-        {"plugins": [{"id": "one"}], "pagination": {"next_page_token": "page-2"}},
-        {"plugins": [{"id": "two"}], "pagination": {"next_page_token": None}},
-    ])
+    pages = iter(
+        [
+            {"plugins": [{"id": "one"}], "pagination": {"next_page_token": "page-2"}},
+            {"plugins": [{"id": "two"}], "pagination": {"next_page_token": None}},
+        ]
+    )
     client._get_chatgpt = lambda *args, **kwargs: next(pages)
 
     assert [item["id"] for item in client.chatgpt.plugins.list_all()] == ["one", "two"]
@@ -166,6 +184,14 @@ def test_remote_plugin_installation_mutations_are_explicit_and_validated():
 
     assert installation.install("plugins~linear")["enabled"] is True
     assert installation.uninstall("plugins~linear")["enabled"] is False
+    assert installation.enable("plugins~linear")["enabled"] is True
+    assert installation.disable("plugins~linear")["enabled"] is False
+    assert (
+        installation.enable_skill("plugins~linear", "create-issue")["enabled"] is True
+    )
+    assert (
+        installation.disable_skill("plugins~linear", "create-issue")["enabled"] is False
+    )
     assert client.calls == [
         (
             "POST",
@@ -179,6 +205,26 @@ def test_remote_plugin_installation_mutations_are_explicit_and_validated():
             "POST",
             "/ps/plugins/plugins~linear/uninstall",
             {"params": None, "headers": {"OAI-Product-Sku": "codex"}},
+        ),
+        (
+            "POST",
+            "/ps/plugins/plugins~linear/enable",
+            {"headers": {"OAI-Product-Sku": "codex"}},
+        ),
+        (
+            "POST",
+            "/ps/plugins/plugins~linear/disable",
+            {"headers": {"OAI-Product-Sku": "codex"}},
+        ),
+        (
+            "POST",
+            "/ps/plugins/plugins~linear/skills/create-issue/enable",
+            {"headers": {"OAI-Product-Sku": "codex"}},
+        ),
+        (
+            "POST",
+            "/ps/plugins/plugins~linear/skills/create-issue/disable",
+            {"headers": {"OAI-Product-Sku": "codex"}},
         ),
     ]
 

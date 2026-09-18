@@ -8,14 +8,14 @@ assertion that every route is enabled for every account.
 ## Audited snapshot and method
 
 - Codex checkout: `openai/codex` at
-  `c0ad3ab014a27d66d1631fb00f7a70b035f46f0d`.
+  `7498521d288b9b3b96ffba4eedf089d8d6e06a84`.
 - Linux-port checkout: `openai/codex-desktop-linux` at
-  `05bbbc6cb4b7729e01b15348c0082a086816da84`.
-- Bundled official application: `openai-codex-electron` `26.721.31836`.
-- `Codex.dmg` SHA-256:
-  `ff6e8ac9985aec44caa305787552e4ea517a7c745aef283bd4cbcab992de64b7`.
+  `1ef0ece683afb19f8624138599308a1ca1571fa5`.
+- Packaged official application: `26.915.31945` (amd64 `.deb`).
+- `.deb` SHA-256:
+  `d27a9c02919cfe484dcc5f34584b9ea9fd0d7a65c69dcc872b5bdcfa0efb5983`.
 - `app.asar` SHA-256:
-  `674dab67fe39f9912493f640c1dd80f222f6062ad0f50b182a6cc87eebd0d3dc`.
+  `8889a6e9aeba678a5d77876bcc9cfce3168ab47cc7bb4ba5856f80a3a32157a8`.
 
 The ASAR was extracted and all Electron and webview JavaScript chunks were
 searched, including lazy feature chunks. Routes below are backed by a concrete
@@ -23,6 +23,44 @@ HTTP-client invocation in the bundle. This avoids counting ordinary UI routes
 such as `/settings/voice` as backend endpoints. "Desktop-only" below means that
 the route string was not found in the contemporaneous `codex-rs` checkout; it
 does not imply that no other OpenAI client uses it.
+
+### September 2026 rescan delta
+
+The refreshed Codex checkout added account analytics and accounting routes:
+workspace token/credit reports, message/plugin/skill usage reports, task usage
+v2, per-turn estimates, and a seven-day plan-limit history. The SDK now exposes
+all except plan-limit history: the latter returned `404` in a current OAuth
+probe and remains an optional server rollout rather than a dependable SDK
+primitive. Codex also contains a turn-cost analytics request to
+`api.chatgpt.com/v1`; that path requires API-key authentication and is outside
+this OAuth SDK.
+
+The OAuth model catalog now advertises `gpt-5.5`; the backend rejects the
+SDK's former `gpt-5.4` default for ChatGPT/Codex accounts. A live `gpt-5.5`
+Responses turn completed successfully, so the client default and executable
+examples now use `gpt-5.5`.
+
+Plugin discovery moved from `/ps/plugins/suggested` to
+`/ps/plugins/suggested/codex`. The new path and Desktop's `/ps/plugins/home`
+both returned `200` with ordinary Codex OAuth and are now exposed. Current
+Desktop also toggles whole plugins and individual skills through explicit
+`enable`/`disable` routes; these mutations are exposed from their observed
+contracts without pretending their private response schemas are stable.
+
+The prior `/plugins/featured` and `/plugins/export/curated` routes are absent
+from the current Desktop bundle, but they are still used by current Codex as
+the legacy featured feed and curated-export fallback. They therefore remain in
+the SDK. Conversely, `/models/config` was not found in the refreshed Desktop
+bundle; it remains a compatibility read rather than a current UI dependency.
+
+The current Desktop package adds broader file-library, connector, shared-thread,
+plugin-category, app-batch, ChatPass, and product-specific endpoints. Those
+families are recorded as follow-up inventory rather than being bulk-exposed:
+many are mutations, commercial surfaces, or require a narrower contract audit.
+Representative current reads were probed where safe. Usage counts plus plugin
+and skill metrics returned `200`; workspace token/credit reports returned the
+expected account-gating errors on a non-workspace account; reset-credit history
+returned `200`.
 
 ## OAuth comparison
 
@@ -79,6 +117,14 @@ exposure status is authoritative in `endpoint-coverage.md`.
 | GET | `/backend-api/wham/usage/daily-token-usage-breakdown` | Daily token usage detail. |
 | GET | `/backend-api/wham/usage/credit-usage-events` | Credit consumption history. |
 | POST | `/backend-api/wham/usage/thread_usage/query` | Usage attributed to selected threads. |
+| POST | `/backend-api/wham/usage/thread_usage/query_v2` | Usage attributed to task roots and descendants. |
+| POST | `/backend-api/wham/usage/thread-estimates/query` | Per-turn estimates and settled response IDs. |
+| GET | `/backend-api/wham/usage/daily-workspace-user-token-usage-breakdown` | Workspace token usage; account-gated. |
+| GET | `/backend-api/wham/usage/daily-workspace-user-credit-usage` | Enterprise workspace credit usage. |
+| GET | `/backend-api/wham/analytics/daily-workspace-usage-counts` | Daily workspace usage counts. |
+| GET | `/backend-api/wham/analytics/daily-plugin-usage-metrics` | Daily plugin usage metrics. |
+| GET | `/backend-api/wham/analytics/daily-skill-usage-metrics` | Daily skill usage metrics. |
+| GET | `/backend-api/wham/rate-limit-reset-credits/history` | Paginated reset-credit event history. |
 | GET | `/backend-api/wham/github/repositories/search/all-installations` | Repository search across GitHub installations. |
 | GET | `/backend-api/wham/github/branches/{repo_id}/search` | Branch search for a cloud repository. |
 | GET | `/backend-api/wham/environments/search` | Cloud-environment search. |
@@ -200,7 +246,7 @@ The hosted plugin feeds and both observed Apps transports are now exposed:
 MCP Streamable HTTP `/ps/mcp` lifecycle.
 
 The newer Codex checkout also uses `/ps/plugins/list`, `search`, `installed`,
-`suggested`, workspace sharing, detail, and explicit install/uninstall routes.
+`suggested/codex`, workspace sharing, detail, and explicit install/uninstall routes.
 Their read surfaces are live-probed and exposed under `client.chatgpt.plugins`;
 installation mutations are contract-tested only. Workspace plugin publication,
 signed archive upload, created-share discovery, access-target management, and

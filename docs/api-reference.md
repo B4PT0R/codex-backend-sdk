@@ -30,7 +30,7 @@ that serializes to one JSON object.
 OpenAI(
     *,
     store: TokenStore | None = None,
-    model: str = "gpt-5.4",
+    model: str = "gpt-5.5",
     instructions: str | None = None,
     timeout: float = 120,
     max_retries: int = 2,
@@ -249,8 +249,21 @@ Platform quota rather than the ChatGPT subscription.
 
 | Method | Parameters | Returns |
 | --- | --- | --- |
+| `client.live.create(...)` | official `session`, `transport`; standard request extensions | `LiveCreateResponse` with `session.id` and `transport.sdp` |
+| `client.live.sideband.connect(...)` | official sideband keywords including `session_id`, `graceful_close`, request/socket/retry options | lazy `LiveSidebandConnectionManager` context manager |
 | `client.realtime.calls.create_v3(...)` | `sdp`, `session`, optional `session_id`, `thread_id`, transport extensions | typed `RealtimeCallResponse` |
 | `client.realtime.sideband.connect(...)` | `call_id`, optional `session_id`, `timeout`, `extra_headers` | `RealtimeSidebandConnection` |
+
+`client.live` is the preferred portable surface. It follows `openai-python`
+3.16.1: create a session with
+`client.live.create(session=..., transport={"type": "webrtc", "sdp": ...})`,
+apply `response.transport.sdp`, then attach with
+`client.live.sideband.connect(session_id=response.session.id)`. The OAuth
+adapter presents the backend call ID as the Live session ID. The connection is
+iterable and yields forward-compatible `LiveEvent` objects with attribute
+access. The public primary `client.live.connect()` transport raises an explicit
+unsupported error because ChatGPT OAuth currently exposes only WebRTC plus an
+attached sideband.
 
 `create_v3()` requires the effective model to be `gpt-live-1-codex` or
 `gpt-live-1-boulder-alpha`, removes any caller-supplied session ID, generates
@@ -273,8 +286,16 @@ Unless otherwise stated, methods in this section return raw backend
 | `.usage_details.daily_token_breakdown()` | none | daily usage dictionary |
 | `.usage_details.credit_events()` | none | credit event dictionary |
 | `.usage_details.threads(thread_ids)` | non-empty list of IDs | usage attributed to selected threads |
+| `.usage_details.workspace_token_usage(...)` | inclusive `start_date`, `end_date`; optional `breakdown_by`, `modes` | workspace token report; account-gated |
+| `.usage_details.workspace_credit_usage(...)` | inclusive dates and `breakdown` | Enterprise credit report |
+| `.usage_details.workspace_usage_counts(...)` | inclusive dates | daily workspace usage counts |
+| `.usage_details.plugin_usage_metrics(...)` | inclusive dates, optional `limit=10` | daily plugin usage metrics |
+| `.usage_details.skill_usage_metrics(...)` | inclusive dates, optional `limit=10` | daily skill usage metrics |
+| `.usage_details.task_usage(threads)` | 1-100 disjoint task descriptors, at most 1,000 IDs | task-root usage query v2 |
+| `.usage_details.turn_estimates(threads)` | mapping of thread IDs to non-empty turn-ID lists | per-turn estimates and settled response IDs |
 | `.rate_limit_reset_credits.list()` | none | typed `RateLimitResetCredits` |
 | `.rate_limit_reset_credits.consume(...)` | `redeem_request_id`, `credit_id=None` | typed `ConsumeRateLimitResetCreditResponse`; explicit quota mutation |
+| `.rate_limit_reset_credits.history(cursor=None)` | optional page cursor | raw 30-day event-history page |
 | `.profile.retrieve()` | none | profile dictionary |
 | `.profile.update(body)` | JSON object | updated profile dictionary |
 | `.profile.upload_photo(...)` | local `path`, optional `content_type` | uploaded asset-pointer string |
@@ -588,11 +609,14 @@ and uses MCP protocol version `2025-06-18`.
 | `.installed(...)` | optional `scope`, `limit=200`, `page_token`, `include_download_urls` | page |
 | `.installed_all(...)` | optional `scope`, `include_download_urls` | aggregated list |
 | `.workspace_shared(...)` | `limit=200`, `page_token=None` | page |
+| `.home()` | none | validated current Desktop home sections |
 | `.suggested(...)` | `scope="GLOBAL"` | suggested plugin dictionary |
 | `.retrieve(plugin_id, ...)` | ID, optional `include_download_urls` | detail |
 | `.skill(plugin_id, skill_name)` | IDs | skill detail/Markdown |
 | `.installation.install(...)` | plugin ID, optional `include_apps_needing_auth=True` | mutation result |
 | `.installation.uninstall(plugin_id)` | ID | mutation result |
+| `.installation.enable/disable(plugin_id)` | ID | explicit remote-plugin state mutation |
+| `.installation.enable_skill/disable_skill(...)` | plugin ID and skill name | explicit remote-skill state mutation |
 
 #### Bundle materialization
 

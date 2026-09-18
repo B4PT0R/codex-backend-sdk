@@ -53,6 +53,12 @@ class FakeCodexClient(OpenAI):
             return {"days": []}
         if path == "/wham/usage/credit-usage-events":
             return {"events": []}
+        if path.startswith("/wham/usage/daily-workspace-user-"):
+            return {"data": []}
+        if path.startswith("/wham/analytics/daily-"):
+            return {"data": []}
+        if path == "/wham/rate-limit-reset-credits/history":
+            return {"events": [], "next_cursor": None}
         if path == "/wham/tasks/task_1/turns/turn_1":
             return {"id": "turn_1"}
         if path == "/wham/tasks/task_1/turns/turn_1/logs":
@@ -75,6 +81,10 @@ class FakeCodexClient(OpenAI):
             return {"ok": True}
         if path == "/wham/usage/thread_usage/query":
             return {"threads": []}
+        if path == "/wham/usage/thread_usage/query_v2":
+            return {"threads": []}
+        if path == "/wham/usage/thread-estimates/query":
+            return {"threads": []}
         if path == "/wham/environments/env_1/reset-cache":
             return {"ok": True}
         raise AssertionError(f"Unexpected WHAM path: {path}")
@@ -91,14 +101,16 @@ class FakeCodexClient(OpenAI):
             return {
                 "available_count": 1,
                 "total_earned_count": 2,
-                "credits": [{
-                    "id": "credit_1",
-                    "reset_type": "codex_rate_limits",
-                    "status": "available",
-                    "granted_at": "2026-07-01T00:00:00Z",
-                    "expires_at": "2026-08-01T00:00:00Z",
-                    "title": "Full reset",
-                }],
+                "credits": [
+                    {
+                        "id": "credit_1",
+                        "reset_type": "codex_rate_limits",
+                        "status": "available",
+                        "granted_at": "2026-07-01T00:00:00Z",
+                        "expires_at": "2026-08-01T00:00:00Z",
+                        "title": "Full reset",
+                    }
+                ],
             }
         raise AssertionError(f"Unexpected Codex get path: {path}")
 
@@ -106,7 +118,9 @@ class FakeCodexClient(OpenAI):
         self.chatgpt_gets.append(path)
         if path == "/memories":
             return {
-                "memories": [{"id": "mem_1", "content": "Remember this", "status": "enabled"}],
+                "memories": [
+                    {"id": "mem_1", "content": "Remember this", "status": "enabled"}
+                ],
                 "memory_num_tokens": 2,
                 "memory_max_tokens": 1000,
             }
@@ -117,18 +131,16 @@ class FakeCodexClient(OpenAI):
     def _post(self, path, *, body, stream=False):
         self.posts.append((path, body, stream))
         if path == "/memories/trace_summarize":
-            return FakeJSONResponse({
-                "output": [{"trace_summary": "raw", "memory_summary": "summary"}]
-            })
+            return FakeJSONResponse(
+                {"output": [{"trace_summary": "raw", "memory_summary": "summary"}]}
+            )
         if path == "/rate-limit-reset-credits/consume":
             return FakeJSONResponse({"code": "reset", "windows_reset": 2})
         raise AssertionError(f"Unexpected Codex post path: {path}")
 
     def _post_chatgpt_raw(self, path, **kwargs):
         file_tuple = kwargs["files"]["file"]
-        self.posts.append(
-            (path, file_tuple[0], file_tuple[1].read(), file_tuple[2])
-        )
+        self.posts.append((path, file_tuple[0], file_tuple[1].read(), file_tuple[2]))
         return FakeJSONResponse({"asset_pointer": "asset://profile-photo"})
 
 
@@ -280,7 +292,9 @@ def test_codex_tasks_retrieve_and_turns_return_raw_payloads():
         "turn_mapping": {},
         "current_turn_id": "turn_1",
     }
-    assert client.codex.tasks.turns.sibling_turns("task_1", "turn_1") == {"sibling_turns": []}
+    assert client.codex.tasks.turns.sibling_turns("task_1", "turn_1") == {
+        "sibling_turns": []
+    }
     assert client.wham_gets == [
         ("/wham/tasks/task_1", None),
         ("/wham/tasks/task_1/turns", None),
@@ -417,6 +431,122 @@ def test_codex_desktop_usage_detail_routes_are_exposed():
     ]
 
 
+def test_current_codex_usage_analytics_and_queries_are_exposed():
+    client = FakeCodexClient()
+
+    dates = {"start_date": "2026-09-01", "end_date": "2026-09-18"}
+    assert client.codex.usage_details.workspace_token_usage(
+        **dates, breakdown_by="model", modes=["codex", "work"]
+    ) == {"data": []}
+    assert client.codex.usage_details.workspace_credit_usage(
+        **dates, breakdown="model"
+    ) == {"data": []}
+    assert client.codex.usage_details.workspace_usage_counts(**dates) == {"data": []}
+    assert client.codex.usage_details.plugin_usage_metrics(**dates, limit=12) == {
+        "data": []
+    }
+    assert client.codex.usage_details.skill_usage_metrics(**dates, limit=8) == {
+        "data": []
+    }
+    assert client.codex.usage_details.task_usage(
+        [
+            {
+                "thread_id": "thread_1",
+                "created_at": "2026-09-18T10:00:00Z",
+                "descendant_thread_ids": ["thread_2"],
+            }
+        ]
+    ) == {"threads": []}
+    assert client.codex.usage_details.turn_estimates(
+        {"thread_1": ["turn_1", "turn_2"]}
+    ) == {"threads": []}
+
+    assert client.wham_gets == [
+        (
+            "/wham/usage/daily-workspace-user-token-usage-breakdown",
+            {
+                **dates,
+                "group_by": "day",
+                "breakdown_by": "model",
+                "modes": ["codex", "work"],
+            },
+        ),
+        (
+            "/wham/usage/daily-workspace-user-credit-usage",
+            {**dates, "breakdown": "model"},
+        ),
+        (
+            "/wham/analytics/daily-workspace-usage-counts",
+            {**dates, "group_by": "day", "workspace_user": True},
+        ),
+        (
+            "/wham/analytics/daily-plugin-usage-metrics",
+            {
+                **dates,
+                "group_by": "day",
+                "workspace_user": True,
+                "top_plugin_limit": 12,
+            },
+        ),
+        (
+            "/wham/analytics/daily-skill-usage-metrics",
+            {**dates, "group_by": "day", "workspace_user": True, "top_skill_limit": 8},
+        ),
+    ]
+    assert client.wham_posts == [
+        (
+            "/wham/usage/thread_usage/query_v2",
+            {
+                "threads": [
+                    {
+                        "thread_id": "thread_1",
+                        "created_at": "2026-09-18T10:00:00Z",
+                        "descendant_thread_ids": ["thread_2"],
+                    }
+                ]
+            },
+        ),
+        (
+            "/wham/usage/thread-estimates/query",
+            {
+                "threads": [
+                    {"thread_id": "thread_1", "turn_ids": ["turn_1", "turn_2"]}
+                ],
+                "include_settled_response_ids": True,
+            },
+        ),
+    ]
+
+
+def test_current_codex_usage_queries_validate_bounded_inputs():
+    usage = FakeCodexClient().codex.usage_details
+
+    with pytest.raises(ValueError, match="start_date"):
+        usage.workspace_usage_counts(start_date="", end_date="2026-09-18")
+    with pytest.raises(ValueError, match="positive"):
+        usage.plugin_usage_metrics(
+            start_date="2026-09-01", end_date="2026-09-18", limit=0
+        )
+    with pytest.raises(ValueError, match="disjoint"):
+        usage.task_usage([{"thread_id": "same", "descendant_thread_ids": ["same"]}])
+    with pytest.raises(ValueError, match="turn identifiers"):
+        usage.turn_estimates({"thread_1": []})
+
+
+def test_rate_limit_reset_credit_history_is_paginated():
+    client = FakeCodexClient()
+
+    assert client.codex.rate_limit_reset_credits.history(cursor="next") == {
+        "events": [],
+        "next_cursor": None,
+    }
+    assert client.wham_gets == [
+        ("/wham/rate-limit-reset-credits/history", {"cursor": "next"})
+    ]
+    with pytest.raises(ValueError, match="cursor"):
+        client.codex.rate_limit_reset_credits.history(cursor="")
+
+
 def test_codex_desktop_task_turn_details_and_actions_are_exposed():
     client = FakeCodexClient()
 
@@ -450,12 +580,8 @@ def test_codex_desktop_environment_lifecycle_is_explicit():
         ("/wham/environments/env_1/with-creator-and-machine", None),
         ("/wham/machines", None),
     ]
-    assert client.wham_patches == [
-        ("/wham/environments/env_1", {"label": "Updated"})
-    ]
-    assert client.wham_posts == [
-        ("/wham/environments/env_1/reset-cache", None)
-    ]
+    assert client.wham_patches == [("/wham/environments/env_1", {"label": "Updated"})]
+    assert client.wham_posts == [("/wham/environments/env_1/reset-cache", None)]
     assert client.wham_deletes == [("/wham/environments/env_1", None)]
 
 

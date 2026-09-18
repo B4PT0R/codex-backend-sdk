@@ -88,7 +88,7 @@ The backend may include an `ETag` header. The SDK preserves it as
 Key fields per model:
 | Field | Type | Notes |
 |---|---|---|
-| `slug` | string | Model identifier, e.g. `"gpt-5.2"`, `"gpt-5.4"` |
+| `slug` | string | Model identifier, e.g. `"gpt-5.2"`, `"gpt-5.5"` |
 | `display_name` | string | |
 | `context_window` | int | |
 | `supported_in_api` | bool | False for models only available via ChatGPT UI |
@@ -105,7 +105,7 @@ Key fields per model:
 | `priority` | int | Higher = shown first |
 
 **Notes**
-- `gpt-5.4` is the current default and works for inference but appears as `supported_in_api: false`.
+- `gpt-5.5` is the current OAuth catalog default and works for inference.
 - `gpt-5.2` has `supports_reasoning_summaries: true` and `supported_in_api: true`.
 
 ---
@@ -127,7 +127,7 @@ schema and returns `ParsedResponse`.
 
 ```json
 {
-  "model": "gpt-5.4",
+  "model": "gpt-5.5",
   "stream": true,
   "tools": [],
   "tool_choice": "auto",
@@ -259,7 +259,7 @@ explicit remote-compaction-v2 contract on the normal streaming Responses route.
 **Request body**:
 ```json
 {
-  "model": "gpt-5.4",
+  "model": "gpt-5.5",
   "input": [ /* full conversation history */, { "type": "compaction_trigger" } ],
   "instructions": "Compact the conversation.",
   "tools": [],
@@ -301,7 +301,7 @@ on plan/account capabilities.
 **Request body**:
 ```json
 {
-  "model": "gpt-5.4",
+  "model": "gpt-5.5",
   "traces": [
     {
       "id": "trace_1",
@@ -322,18 +322,24 @@ on plan/account capabilities.
 
 Realtime audio/video call initiation.
 
-**SDK methods**: `client.realtime.calls.create_v3(...)` and
-`client.realtime.sideband.connect(...)`
+**SDK methods**: preferred `client.live.create(...)` and
+`client.live.sideband.connect(...)`; additive low-level
+`client.realtime.calls.create_v3(...)` and `client.realtime.sideband.connect(...)`
 
 **Status**: Supported by the current Codex client over ChatGPT OAuth. The SDK
 exposes the Realtime v3 frameless call directly:
 
 ```python
-call = client.realtime.calls.create_v3(
-    sdp=offer_sdp,
-    session={"model": "gpt-live-1-codex"},
+live = client.live.create(
+    session={
+        "model": "gpt-live-1-codex",
+        "delegation": {"type": "client"},
+    },
+    transport={"type": "webrtc", "sdp": offer_sdp},
 )
-sideband = client.realtime.sideband.connect(call_id=call.call_id)
+with client.live.sideband.connect(session_id=live.session.id) as sideband:
+    for event in sideband:
+        handle(event)
 ```
 
 For Realtime v3, Codex sends `openai-alpha: quicksilver=v2`, the AVAS query
@@ -353,6 +359,13 @@ frameless v3 call, whereas the ChatGPT OAuth backend keeps the
 The response exposes `.answer_sdp` and `.call_id`, while preserving the binary
 helpers `.content`, `.text`, `.read()`, `.iter_bytes()`, and
 `.write_to_file(...)`.
+
+The portable `client.live` adapter instead returns the current public shape:
+`.session.id`, `.transport.type`, and `.transport.sdp`. The backend call ID is
+used as the session ID because `/v1/live/{call_id}` is the OAuth sideband
+identity. Event payloads remain the backend's actual experimental dialect;
+`LiveEvent` adds attribute access without inventing public timestamps or
+renaming backend-only messages.
 
 ### `POST /codex/alpha/search`
 
@@ -374,7 +387,8 @@ command returned text plus encrypted continuation state successfully.
 
 ### Realtime v3 sideband
 
-After creating a WebRTC call, `client.realtime.sideband.connect(...)` joins its
+After creating a WebRTC call, `client.live.sideband.connect(...)` (or the
+low-level `client.realtime.sideband.connect(...)`) joins its
 JSON control/delegation channel at `/v1/live/{call_id}` with the current ChatGPT
 OAuth account. This transport is used for client-managed delegation events and
 context appends. The SDK intentionally does not expose the unrelated API-key
@@ -1006,4 +1020,4 @@ Returned verbatim from `response.output_item.done` with `item.type = "function_c
 - `memories/trace_summarize` — 403 on Plus; Pro/Enterprise only.
 - Reasoning tokens are billed separately from output tokens.
 - The `reasoning.summary` field only populates for models with `supports_reasoning_summaries: true` (e.g. `gpt-5.2`); on other models the field is absent and only `encrypted_content` is present.
-- `gpt-5.4` works for inference but is not listed as `supported_in_api: true` in `/models`.
+- `gpt-5.5` works for inference and is returned by the current OAuth model catalog.

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import quote
 
 if TYPE_CHECKING:
@@ -23,13 +23,18 @@ class ChatGPTPlugins:
         payload = self._client._get_chatgpt(
             "/plugins/featured", params={"platform": platform}
         )
-        if not isinstance(payload, list) or not all(isinstance(item, str) for item in payload):
+        if not isinstance(payload, list) or not all(
+            isinstance(item, str) for item in payload
+        ):
             raise RuntimeError("Featured plugins returned an invalid plugin-id list.")
         return payload
 
     def curated_export(self) -> dict[str, Any]:
         payload = self._client._get_chatgpt("/plugins/export/curated")
-        if not isinstance(payload.get("download_url"), str) or not payload["download_url"]:
+        if (
+            not isinstance(payload.get("download_url"), str)
+            or not payload["download_url"]
+        ):
             raise RuntimeError("Curated plugin export is missing its download URL.")
         return payload
 
@@ -46,8 +51,16 @@ class ChatGPTPlugins:
             params={
                 "scope": _scope(scope),
                 "limit": _positive(limit, "limit"),
-                **({} if collection is None else {"collection": _required(collection, "collection")}),
-                **({} if page_token is None else {"pageToken": _required(page_token, "page_token")}),
+                **(
+                    {}
+                    if collection is None
+                    else {"collection": _required(collection, "collection")}
+                ),
+                **(
+                    {}
+                    if page_token is None
+                    else {"pageToken": _required(page_token, "page_token")}
+                ),
             },
         )
 
@@ -77,7 +90,11 @@ class ChatGPTPlugins:
                 "q": _required(query, "query"),
                 "limit": _positive(limit, "limit"),
                 **({} if scope is None else {"scope": _scope(scope)}),
-                **({} if page_token is None else {"pageToken": _required(page_token, "page_token")}),
+                **(
+                    {}
+                    if page_token is None
+                    else {"pageToken": _required(page_token, "page_token")}
+                ),
             },
         )
 
@@ -124,9 +141,20 @@ class ChatGPTPlugins:
             "/ps/plugins/workspace/shared",
             params={
                 "limit": _positive(limit, "limit"),
-                **({} if page_token is None else {"pageToken": _required(page_token, "page_token")}),
+                **(
+                    {}
+                    if page_token is None
+                    else {"pageToken": _required(page_token, "page_token")}
+                ),
             },
         )
+
+    def home(self) -> dict[str, Any]:
+        """Return the curated plugin home sections used by current Desktop."""
+        payload = self._client._get_chatgpt("/ps/plugins/home", headers=_headers())
+        if not isinstance(payload.get("sections"), list):
+            raise TypeError("Plugin home response contains invalid sections.")
+        return payload
 
     def suggested(
         self,
@@ -134,12 +162,14 @@ class ChatGPTPlugins:
         scope: Literal["GLOBAL", "USER", "WORKSPACE"] = "GLOBAL",
     ) -> dict[str, Any]:
         payload = self._client._get_chatgpt(
-            "/ps/plugins/suggested",
+            "/ps/plugins/suggested/codex",
             params={"scope": _scope(scope)},
             headers=_headers(),
         )
         if not isinstance(payload.get("plugins"), list):
-            raise RuntimeError("Suggested plugins response contains an invalid plugin list.")
+            raise RuntimeError(
+                "Suggested plugins response contains an invalid plugin list."
+            )
         return payload
 
     def retrieve(
@@ -150,9 +180,7 @@ class ChatGPTPlugins:
     ) -> dict[str, Any]:
         payload = self._client._get_chatgpt(
             f"/ps/plugins/{_path(plugin_id, 'plugin_id')}",
-            params=(
-                {"includeDownloadUrls": True} if include_download_urls else None
-            ),
+            params=({"includeDownloadUrls": True} if include_download_urls else None),
             headers=_headers(),
         )
         if not isinstance(payload.get("id"), str):
@@ -170,12 +198,18 @@ class ChatGPTPlugins:
             headers=_headers(),
         )
         if payload.get("plugin_id") != expected_id:
-            raise RuntimeError("Plugin skill response returned an unexpected plugin ID.")
+            raise RuntimeError(
+                "Plugin skill response returned an unexpected plugin ID."
+            )
         if payload.get("name") != expected_name:
-            raise RuntimeError("Plugin skill response returned an unexpected skill name.")
+            raise RuntimeError(
+                "Plugin skill response returned an unexpected skill name."
+            )
         contents = payload.get("skill_md_contents")
         if contents is not None and not isinstance(contents, str):
-            raise RuntimeError("Plugin skill response returned invalid Markdown contents.")
+            raise RuntimeError(
+                "Plugin skill response returned invalid Markdown contents."
+            )
         return payload
 
     def _page(self, path: str, *, params: dict[str, Any]) -> dict[str, Any]:
@@ -195,9 +229,13 @@ class ChatGPTPlugins:
             if token_value is None:
                 return plugins
             if not isinstance(token_value, str) or not token_value:
-                raise RuntimeError("Plugin catalog returned an invalid next page token.")
+                raise RuntimeError(
+                    "Plugin catalog returned an invalid next page token."
+                )
             if token_value in seen:
-                raise RuntimeError("Plugin catalog returned a repeated next page token.")
+                raise RuntimeError(
+                    "Plugin catalog returned a repeated next page token."
+                )
             seen.add(token_value)
             token = token_value
 
@@ -223,6 +261,46 @@ class ChatGPTPluginInstallation:
 
     def uninstall(self, plugin_id: str) -> dict[str, Any]:
         return self._mutate(plugin_id, "uninstall", expected_enabled=False)
+
+    def enable(self, plugin_id: str) -> dict[str, Any]:
+        return self._set_enabled(plugin_id, "enable")
+
+    def disable(self, plugin_id: str) -> dict[str, Any]:
+        return self._set_enabled(plugin_id, "disable")
+
+    def enable_skill(self, plugin_id: str, skill_name: str) -> dict[str, Any]:
+        return self._set_skill_enabled(plugin_id, skill_name, "enable")
+
+    def disable_skill(self, plugin_id: str, skill_name: str) -> dict[str, Any]:
+        return self._set_skill_enabled(plugin_id, skill_name, "disable")
+
+    def _set_enabled(self, plugin_id: str, action: str) -> dict[str, Any]:
+        expected_id = _required(plugin_id, "plugin_id")
+        payload = self._client._request_chatgpt(
+            "POST",
+            f"/ps/plugins/{_path(expected_id, 'plugin_id')}/{action}",
+            headers=_headers(),
+        ).json()
+        if not isinstance(payload, dict):
+            raise TypeError("Plugin state mutation returned an invalid response.")
+        return payload
+
+    def _set_skill_enabled(
+        self, plugin_id: str, skill_name: str, action: str
+    ) -> dict[str, Any]:
+        expected_id = _required(plugin_id, "plugin_id")
+        expected_name = _required(skill_name, "skill_name")
+        payload = self._client._request_chatgpt(
+            "POST",
+            (
+                f"/ps/plugins/{_path(expected_id, 'plugin_id')}/skills/"
+                f"{_path(expected_name, 'skill_name')}/{action}"
+            ),
+            headers=_headers(),
+        ).json()
+        if not isinstance(payload, dict):
+            raise TypeError("Plugin skill mutation returned an invalid response.")
+        return payload
 
     def _mutate(
         self,
@@ -252,7 +330,9 @@ def _headers() -> dict[str, str]:
 
 def _required(value: str, name: str) -> str:
     if not value:
-        raise ValueError(f"Expected a non-empty value for `{name}` but received {value!r}")
+        raise ValueError(
+            f"Expected a non-empty value for `{name}` but received {value!r}"
+        )
     return value
 
 
@@ -275,7 +355,9 @@ def _path(value: str, name: str) -> str:
 def _validate_page(payload: dict[str, Any]) -> None:
     plugins = payload.get("plugins")
     pagination = payload.get("pagination")
-    if not isinstance(plugins, list) or not all(isinstance(item, dict) for item in plugins):
+    if not isinstance(plugins, list) or not all(
+        isinstance(item, dict) for item in plugins
+    ):
         raise RuntimeError("Plugin catalog response contains an invalid plugin list.")
     if not isinstance(pagination, dict):
         raise RuntimeError("Plugin catalog response contains invalid pagination.")

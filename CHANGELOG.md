@@ -2,7 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## [0.5.3] - 2026-09-18
+
+### Added
+- Added the OpenAI-shaped `client.live.create(...)` and
+  `client.live.sideband.connect(...)` surfaces over the existing Codex OAuth
+  Realtime v3 transport, including the public response shape and lazy
+  sideband context-manager idiom.
+- Added current Codex workspace usage, task-usage, turn-estimate, plugin/skill
+  analytics, and reset-credit history resources discovered by the refreshed
+  source scan.
+- Added the current Desktop plugin home feed and explicit plugin/skill
+  enable-disable mutations.
+
+### Changed
+- Updated the compatibility baseline to `openai-python` 3.16.1 while retaining
+  the additive low-level `client.realtime` API.
+- Reconciled the endpoint inventory with the refreshed Codex and official
+  Desktop checkouts, and tightened validation of plugin catalog responses and
+  pagination state.
 
 ## [0.5.1] - 2026-08-14
 

@@ -435,6 +435,32 @@ class RealtimeCallResponse(BinaryResponseContent):
         )
 
 
+class LiveSession(CodexBaseModel):
+    """Resolved Live session identity returned by the OAuth adapter."""
+
+    id: str
+
+
+class LiveTransport(CodexBaseModel):
+    """WebRTC answer using the public OpenAI Live response shape."""
+
+    type: Literal["webrtc"] = "webrtc"
+    sdp: str
+
+
+class LiveCreateResponse(CodexBaseModel):
+    """OpenAI-compatible view of a Codex OAuth Realtime call response."""
+
+    session: LiveSession
+    transport: LiveTransport
+
+
+class LiveEvent(CodexBaseModel):
+    """Forward-compatible Live sideband event with attribute access."""
+
+    type: str
+
+
 def _is_uuid(value: str) -> bool:
     if len(value) != 36:
         return False

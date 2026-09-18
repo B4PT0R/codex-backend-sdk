@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "codex-backend-sdk"
-version = "0.5.2"
+version = "0.5.3"
 description = "Unofficial Python SDK for the ChatGPT Codex backend API"
 readme = "README.md"
 license = { text = "MIT" }
@@ -29,13 +29,13 @@ dependencies = [
 
 [project.optional-dependencies]
 openai    = [
-    "openai>=2.53.0; python_version >= '3.10'",
-    "openai>=1.0,<2.53.0; python_version < '3.10'",
+    "openai>=3.16.1; python_version >= '3.10'",
+    "openai>=1.0,<3.0; python_version < '3.10'",
 ]
 dev       = [
     "pytest>=7.0",
-    "openai>=2.53.0; python_version >= '3.10'",
-    "openai>=1.0,<2.53.0; python_version < '3.10'",
+    "openai>=3.16.1; python_version >= '3.10'",
+    "openai>=1.0,<3.0; python_version < '3.10'",
 ]
 
 [tool.hatch.build.targets.wheel]

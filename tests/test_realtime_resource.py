@@ -103,6 +103,41 @@ def test_realtime_calls_create_v3_accepts_confirmed_models_and_sets_alpha_header
         raise AssertionError("Expected an unsupported gpt-live alias to be rejected")
 
 
+def test_live_create_uses_official_shape_over_codex_call_transport():
+    client = FakeRealtimeClient()
+
+    response = client.live.create(
+        session={
+            "model": "gpt-live-1-codex",
+            "delegation": {"type": "client"},
+        },
+        transport={"type": "webrtc", "sdp": "offer-sdp"},
+    )
+
+    assert response.session.id == "rtc_test"
+    assert response.transport.type == "webrtc"
+    assert response.transport.sdp == "answer-sdp"
+    path, kwargs = client.raw_posts[0]
+    assert path == "/realtime/calls"
+    assert kwargs["body"] == {
+        "sdp": "offer-sdp",
+        "session": {
+            "model": "gpt-live-1-codex",
+            "delegation": {"type": "client"},
+        },
+    }
+
+
+def test_live_create_rejects_non_webrtc_transport():
+    client = FakeRealtimeClient()
+
+    with pytest.raises(NotImplementedError, match="WebRTC"):
+        client.live.create(
+            session={"model": "gpt-live-1-codex"},
+            transport={"type": "sip", "sdp": "offer-sdp"},
+        )
+
+
 def test_realtime_calls_create_v3_exposes_backend_error_detail():
     client = ErrorRealtimeClient()
 
@@ -169,6 +204,43 @@ def test_realtime_sideband_connects_with_oauth_and_json_transport(monkeypatch):
         "content": [],
     }
     connection.close()
+    assert socket.closed is True
+
+
+def test_live_sideband_uses_official_context_manager_idiom(monkeypatch):
+    client = FakeRealtimeClient()
+    socket = FakeWebSocket([json.dumps({"type": "session.started", "session": {}})])
+    captured = {}
+
+    def create_connection(url, **kwargs):
+        captured["url"] = url
+        captured.update(kwargs)
+        return socket
+
+    monkeypatch.setattr(
+        "codex_backend_sdk.resources.realtime.websocket.create_connection",
+        create_connection,
+    )
+
+    manager = client.live.sideband.connect(
+        session_id="rtc_test",
+        graceful_close=True,
+        extra_query={"trace": "yes"},
+        websocket_connection_options={"timeout": 15},
+    )
+    manager.send({"type": "session.context.append", "content": []})
+    with manager as connection:
+        event = connection.recv()
+        assert event.type == "session.started"
+        assert event.session == {}
+
+    assert captured["url"] == "wss://api.openai.com/v1/live/rtc_test?trace=yes"
+    assert captured["timeout"] == 15
+    assert json.loads(socket.sent[0]) == {
+        "type": "session.context.append",
+        "content": [],
+    }
+    assert json.loads(socket.sent[1]) == {"type": "session.close"}
     assert socket.closed is True
 
 

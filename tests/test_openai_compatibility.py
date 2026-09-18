@@ -14,34 +14,52 @@ from openai.resources.models import Models as OpenAIModels
 from openai.resources.responses.responses import Responses as OpenAIResponses
 
 from codex_backend_sdk.resources.images import Images
+from codex_backend_sdk.resources.realtime import Live, LiveSideband
 from codex_backend_sdk.resources.files import Files
 from codex_backend_sdk.resources.models import Models
 from codex_backend_sdk.resources.openai_oauth import AudioTranscriptions, Embeddings
 from codex_backend_sdk.resources.responses import Responses
+
+try:
+    from openai.resources.live.live import Live as OpenAILive
+    from openai.resources.live.sideband import Sideband as OpenAILiveSideband
+except ImportError:  # openai-python's Live resource requires Python 3.10+
+    OpenAILive = None
+    OpenAILiveSideband = None
 
 
 def _parameters(method):
     return set(inspect.signature(method).parameters) - {"self"}
 
 
+COMMON_SURFACES = [
+    ("responses.create", Responses.create, OpenAIResponses.create),
+    ("responses.parse", Responses.parse, OpenAIResponses.parse),
+    ("responses.compact", Responses.compact, OpenAIResponses.compact),
+    ("models.list", Models.list, OpenAIModels.list),
+    ("models.retrieve", Models.retrieve, OpenAIModels.retrieve),
+    ("images.generate", Images.generate, OpenAIImages.generate),
+    ("images.edit", Images.edit, OpenAIImages.edit),
+    ("embeddings.create", Embeddings.create, OpenAIEmbeddings.create),
+    ("files.create", Files.create, OpenAIFiles.create),
+    (
+        "audio.transcriptions.create",
+        AudioTranscriptions.create,
+        OpenAITranscriptions.create,
+    ),
+]
+if OpenAILive is not None and OpenAILiveSideband is not None:
+    COMMON_SURFACES.extend(
+        [
+            ("live.create", Live.create, OpenAILive.create),
+            ("live.sideband.connect", LiveSideband.connect, OpenAILiveSideband.connect),
+        ]
+    )
+
+
 @pytest.mark.parametrize(
     "surface, backend_method, official_method",
-    [
-        ("responses.create", Responses.create, OpenAIResponses.create),
-        ("responses.parse", Responses.parse, OpenAIResponses.parse),
-        ("responses.compact", Responses.compact, OpenAIResponses.compact),
-        ("models.list", Models.list, OpenAIModels.list),
-        ("models.retrieve", Models.retrieve, OpenAIModels.retrieve),
-        ("images.generate", Images.generate, OpenAIImages.generate),
-        ("images.edit", Images.edit, OpenAIImages.edit),
-        ("embeddings.create", Embeddings.create, OpenAIEmbeddings.create),
-        ("files.create", Files.create, OpenAIFiles.create),
-        (
-            "audio.transcriptions.create",
-            AudioTranscriptions.create,
-            OpenAITranscriptions.create,
-        ),
-    ],
+    COMMON_SURFACES,
 )
 def test_common_surfaces_accept_every_official_parameter(
     surface, backend_method, official_method
@@ -69,6 +87,6 @@ def test_common_surfaces_accept_every_official_parameter(
 
 def test_compatibility_baseline_uses_audited_openai_sdk():
     if sys.version_info < (3, 10):
-        pytest.skip("openai-python 2.53.0 requires Python 3.10 or newer")
+        pytest.skip("The current audited openai-python baseline requires Python 3.10+")
     version = tuple(int(part) for part in openai.__version__.split(".")[:3])
-    assert version >= (2, 53, 0)
+    assert version >= (3, 16, 1)

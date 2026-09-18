@@ -5,7 +5,7 @@ from codex_backend_sdk import CodexClient, Response
 
 def test_responses_create_returns_text(client: CodexClient):
     response = client.responses.create(
-        model="gpt-5.4",
+        model="gpt-5.6-luna",
         input="Reply with exactly: PONG",
     )
 
@@ -18,7 +18,10 @@ def test_responses_create_returns_text(client: CodexClient):
 def test_responses_create_stream_yields_events(client: CodexClient):
     events = list(client.responses.create(input="Say: hi", stream=True))
 
-    assert any(event.type in {"response.output_text.delta", "response.content_part.delta"} for event in events)
+    assert any(
+        event.type in {"response.output_text.delta", "response.content_part.delta"}
+        for event in events
+    )
     assert any(event.type == "response.completed" for event in events)
 
 

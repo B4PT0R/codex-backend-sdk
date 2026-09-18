@@ -17,7 +17,7 @@ Quickstart:
     print(response.output_text)
 """
 
-__version__ = "0.5.2"
+__version__ = "0.5.3"
 
 from .oauth import (
     DeviceCode,
@@ -57,6 +57,10 @@ from .codex_client import (
     Image,
     ImageResponse,
     ImagesResponse,
+    LiveCreateResponse,
+    LiveEvent,
+    LiveSession,
+    LiveTransport,
     RateLimitResetCredit,
     RateLimitResetCredits,
     ConsumeRateLimitResetCreditResponse,
@@ -102,6 +106,10 @@ __all__ = [
     "Image",
     "ImageResponse",
     "ImagesResponse",
+    "LiveCreateResponse",
+    "LiveEvent",
+    "LiveSession",
+    "LiveTransport",
     "RateLimitResetCredit",
     "RateLimitResetCredits",
     "ConsumeRateLimitResetCreditResponse",

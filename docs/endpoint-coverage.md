@@ -18,15 +18,19 @@ proves current account availability, not a public compatibility guarantee.
 
 ## Audit closure
 
-For the snapshots named in `desktop-endpoint-inventory.md`, every production
+For the earlier snapshot named in `desktop-endpoint-inventory.md`, every production
 networking module in `codex-api/src/endpoint`, `backend-client`, cloud tasks,
 plugins/connectors, login, and Remote Control was reconciled with this matrix.
 The extracted official Desktop ASAR was searched across Electron, the initial
 webview bundle, and lazy JavaScript chunks; candidate paths were then checked at
 their concrete HTTP-client call sites to discard UI routes and inert URL
-recognizers. No useful endpoint remains with **inventory** status in this
-snapshot. Future source upgrades can reintroduce that status until their new
-routes are classified.
+recognizers. The September 2026 rescan reconciled the refreshed Codex
+accounting and plugin contracts and sampled the much larger current Desktop
+bundle. The highest-value additions are implemented below. Newly observed
+file-library, connector, shared-thread, plugin-category/app-batch, ChatPass,
+and specialized product families remain **inventory** until each request
+contract and mutation risk is audited; mere presence in a minified bundle is
+not treated as SDK support.
 
 ## Core Codex and protocol transports
 
@@ -40,8 +44,8 @@ routes are classified.
 | `WSS /backend-api/codex/responses` | `client.responses.websocket.connect` | live; handshake metadata and completed reusable response observed |
 | `POST /backend-api/codex/responses` + `compaction_trigger` | `client.responses.compact` | live; remote compaction v2 |
 | `GET /backend-api/codex/models` | `client.models` | live |
-| `POST /backend-api/codex/realtime/calls` | `client.realtime.calls` | live |
-| `WSS /v1/realtime?model=...` | `client.realtime.connect` | live |
+| `POST /backend-api/codex/realtime/calls` | `client.live.create`; `client.realtime.calls` | live |
+| `WSS /v1/live/{call_id}` | `client.live.sideband.connect`; `client.realtime.sideband.connect` | contract; call creation and credentials live-verified |
 | `POST /backend-api/codex/alpha/search` | `client.codex.web_search.search` | live; time command and encrypted continuation state observed |
 | `POST /backend-api/wham/remote/control/server/enroll` | `client.codex.remote_control.enroll` | contract |
 | `POST /backend-api/wham/remote/control/server/refresh` | `client.codex.remote_control.refresh` | contract |
@@ -74,7 +78,8 @@ routes are classified.
 | `GET /backend-api/ps/plugins/list` | `client.chatgpt.plugins.list/list_all` | live; 184 global plugins observed |
 | `GET /backend-api/ps/plugins/search` | `client.chatgpt.plugins.search` | live |
 | `GET /backend-api/ps/plugins/installed` | `client.chatgpt.plugins.installed/installed_all` | live; 3 installed plugins observed |
-| `GET /backend-api/ps/plugins/suggested` | `client.chatgpt.plugins.suggested` | live; 40 suggestions observed |
+| `GET /backend-api/ps/plugins/home` | `client.chatgpt.plugins.home` | live; current Desktop home sections observed |
+| `GET /backend-api/ps/plugins/suggested/codex` | `client.chatgpt.plugins.suggested` | live |
 | `GET /backend-api/ps/plugins/workspace/shared` | `client.chatgpt.plugins.workspace_shared` | live; empty workspace page observed |
 | `GET /backend-api/ps/plugins/{id}` | `client.chatgpt.plugins.retrieve` | live |
 | `GET /backend-api/ps/plugins/{id}/skills/{name}` | `client.chatgpt.plugins.skill` | live |
@@ -82,6 +87,8 @@ routes are classified.
 | Backend-issued skill bundle HTTPS URL | `client.chatgpt.plugins.bundles.download_skill` | contract; probed skill had no auxiliary URL |
 | `POST /backend-api/ps/plugins/{id}/install` | `client.chatgpt.plugins.installation.install` | contract; explicit mutation |
 | `POST /backend-api/ps/plugins/{id}/uninstall` | `client.chatgpt.plugins.installation.uninstall` | contract; explicit mutation |
+| `POST /backend-api/ps/plugins/{id}/{enable,disable}` | `client.chatgpt.plugins.installation.enable/disable` | contract; explicit mutation |
+| `POST /backend-api/ps/plugins/{id}/skills/{name}/{enable,disable}` | `client.chatgpt.plugins.installation.enable_skill/disable_skill` | contract; explicit mutation |
 | `GET /backend-api/ps/plugins/workspace/created` | `client.chatgpt.plugins.shares.created/created_all` | live; empty page observed |
 | `POST /backend-api/public/plugins/workspace/upload-url` | `client.chatgpt.plugins.shares.create_upload` | contract; explicit storage allocation |
 | `POST /backend-api/public/plugins/workspace[/{id}]` | `client.chatgpt.plugins.shares.finish_upload/publish_*` | contract; explicit publication mutation |
@@ -121,7 +128,11 @@ routes are classified.
 
 | Family | SDK surface | Status |
 | --- | --- | --- |
-| Usage, daily breakdown, credit events, thread query | `client.codex.usage` | live reads; query contract |
+| Usage, daily breakdown, credit events, thread query | `client.codex.usage`, `.usage_details` | live reads; query contract |
+| Workspace token/credit reports | `client.codex.usage_details.workspace_*` | contract; current personal-account probe confirmed workspace/Enterprise gating |
+| Workspace message/plugin/skill analytics | `client.codex.usage_details.*_usage_*` | live reads |
+| Task usage v2 and per-turn estimates | `client.codex.usage_details.task_usage/turn_estimates` | contract |
+| Reset-credit event history | `client.codex.rate_limit_reset_credits.history` | live read |
 | Tasks, turns, logs, archives/cancel/recover/read | `client.codex.tasks` | live reads; mutations contract |
 | Environments, machines, repository/branch discovery | `client.codex.environments`, `.repositories` | live reads; mutations contract |
 | Profile and photo | `client.codex.profile` | live read; update/photo mutations contract |

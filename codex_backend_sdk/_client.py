@@ -30,7 +30,7 @@ class CodexClient:
         self,
         *,
         store: Optional[TokenStore] = None,
-        model: str = "gpt-5.4",
+        model: str = "gpt-5.5",
         instructions: Optional[str] = None,
         timeout: float = 120,
         max_retries: int = 2,
@@ -44,7 +44,7 @@ class CodexClient:
         from .resources.openai_oauth import Audio, Embeddings
         from .resources.files import Files
         from .resources.images import Images
-        from .resources.realtime import Realtime
+        from .resources.realtime import Live, Realtime
         from .resources.responses import Responses
 
         self._store = store
@@ -66,6 +66,7 @@ class CodexClient:
         self.responses = Responses(self)
         self.models = Models(self)
         self.realtime = Realtime(self)
+        self.live = Live(self)
         self.embeddings = Embeddings(self)
         self.audio = Audio(self)
         self.images = Images(self)

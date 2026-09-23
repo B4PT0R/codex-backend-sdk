@@ -73,13 +73,30 @@ def test_retry_does_not_retry_client_errors(monkeypatch):
 
     try:
         client._get_raw("/models")
-    except requests.HTTPError:
-        pass
+    except requests.HTTPError as error:
+        assert 'Backend response: {"error": "bad request"}' in str(error)
+        assert error.response is not None
+        assert error.response.status_code == 400
     else:
         raise AssertionError("Expected HTTPError")
 
     assert len(client._session.calls) == 1
     assert sleeps == []
+
+
+def test_http_error_detail_is_bounded():
+    body = b"x" * 5_000
+    client = RetryClient([_response(400, body=body)])
+
+    try:
+        client._get_raw("/models")
+    except requests.HTTPError as error:
+        message = str(error)
+        assert "Backend response: " in message
+        assert message.endswith("...")
+        assert len(message) < 4_200
+    else:
+        raise AssertionError("Expected HTTPError")
 
 
 def test_retry_retries_transport_timeout(monkeypatch):

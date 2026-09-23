@@ -8,6 +8,26 @@ from typing import Any
 import requests
 
 
+_MAX_ERROR_DETAIL_CHARS = 4_000
+
+
+def raise_for_status_with_detail(response: requests.Response) -> None:
+    """Raise the usual HTTPError while retaining a bounded backend error body."""
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as error:
+        detail = response.text.strip()
+        if not detail:
+            raise
+        if len(detail) > _MAX_ERROR_DETAIL_CHARS:
+            detail = detail[:_MAX_ERROR_DETAIL_CHARS] + "..."
+        raise requests.HTTPError(
+            f"{error}. Backend response: {detail}",
+            response=response,
+            request=error.request,
+        ) from error
+
+
 def request_with_retries(
     session: requests.Session,
     method: str,
@@ -26,7 +46,7 @@ def request_with_retries(
             if should_retry_response(response, attempt, max_retries=max_retries):
                 sleep_before_retry(response, attempt, retry_base_delay=retry_base_delay)
                 continue
-            response.raise_for_status()
+            raise_for_status_with_detail(response)
             return response
         except (requests.Timeout, requests.ConnectionError) as exc:
             last_error = exc

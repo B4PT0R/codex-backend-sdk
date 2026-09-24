@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.4] - 2026-09-24
+
+### Fixed
+- Preserve a bounded backend response body in raised HTTP errors so callers can
+  diagnose rejected requests without reconstructing the transport call.
+
 ## [0.5.3] - 2026-09-18
 
 ### Added

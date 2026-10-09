@@ -586,8 +586,14 @@ print(json.dumps({'completed':True,'final_candidate':{'family':candidate['family
             chat.update(state='complete',conversation_id='conv-1',effect_evidence=[{'kind':'provider_conversation','ref':'conv-1'},{'kind':'central_conversation_readback','ref':'conv-1'},{'kind':'chatgpt_sandbox_artifact','ref':hashlib.sha256(work.read_bytes()).hexdigest(),'path':str(work)}])
             unproven=c.run_once(queue=q,plan=plan,role='Elliot Mercer',secretary=secretary,state_root=state,worker_id='test-worker',manager='m',priority=50,external_employee='Rina Hale')
             self.assertIsNone(q.get(c.phase_job_id(plan,'AM-5','external_effect')))
-            self.assertTrue(any(x.get('phase')=='chatgpt_readback' and 'native exec' in x.get('error','') for x in unproven['actions']))
-            chat['effect_evidence'].append({'kind':'provider_observed_native_exec','tool':'container.exec','ref':'result-1','call_ref':'call-1','raw_stream_sha256':'a'*64})
+            retry=q.get(c.phase_job_id(plan,'AM-5','chatgpt_sandbox',1))
+            self.assertEqual(retry['state'],'queued')
+            self.assertTrue(any(x.get('phase')=='native_compute_repair' for x in unproven['actions']))
+            retry.update(state='complete',conversation_id='conv-2',effect_evidence=[
+                {'kind':'provider_conversation','ref':'conv-2'},
+                {'kind':'central_conversation_readback','ref':'conv-2'},
+                {'kind':'chatgpt_sandbox_artifact','ref':hashlib.sha256(work.read_bytes()).hexdigest(),'path':str(work)},
+                {'kind':'provider_observed_native_exec','tool':'container.exec','ref':'result-1','call_ref':'call-1','raw_stream_sha256':'a'*64}])
             second=c.run_once(queue=q,plan=plan,role='Elliot Mercer',secretary=secretary,state_root=state,worker_id='test-worker',manager='m',priority=50,external_employee='Rina Hale')
             effect=q.get(c.phase_job_id(plan,'AM-5','external_effect')); self.assertEqual(effect['state'],'complete')
             # One more controller recurrence observes committed effect completion and releases AM-8 research.

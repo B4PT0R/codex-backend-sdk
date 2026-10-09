@@ -275,6 +275,13 @@ def phase_job_id(plan: Plan, step_id: str, phase: str, attempt: int = 0) -> str:
     return stable_id(plan.project_id, plan.inflight_revisions.get(step_id, plan.sha256), step_id, phase, str(attempt))
 
 
+MAX_CHAT_NATIVE_ATTEMPTS = 3  # One original turn and at most two corrective turns.
+
+
+class NativeEvidenceMissing(ValueError):
+    """A definitive completed Chat-mode turn had no provider-observed native execution."""
+
+
 def final_dependency_ids(plan: Plan, step: Step) -> list[str]:
     by_id = plan.by_id()
     inherited = [dep for dep in step.dependencies if by_id[dep].checked and dep not in plan.completed_effects]
@@ -600,6 +607,30 @@ def _artifact_from_chat_job(job: Mapping[str, Any]) -> Path | None:
     return candidates[0] if len(candidates)==1 else None
 
 
+def verified_chat_completion(job: Mapping[str, Any], plan: Plan) -> dict[str, Any] | None:
+    """Require a ZIP, central readback, and a paired provider-native tool result."""
+    path = _artifact_from_chat_job(job)
+    if not path:
+        return None
+    meta = verify_manifest_zip(path, expected_plan_sha256=plan.sha256, require_external_instructions=True)
+    evidence = [e for e in job.get("effect_evidence") or [] if isinstance(e, dict)]
+    matching = [e for e in evidence if e.get("kind") == "chatgpt_sandbox_artifact"
+                and e.get("path") == str(path) and e.get("ref") == meta["sha256"]]
+    if len(matching) != 1:
+        raise ValueError("ChatGPT artifact evidence SHA mismatch")
+    conversation_id = str(job.get("conversation_id") or "")
+    if not conversation_id or not all(any(e.get("kind") == kind and e.get("ref") == conversation_id for e in evidence)
+                                      for kind in ("provider_conversation", "central_conversation_readback")):
+        raise ValueError("ChatGPT conversation lacks matching central readback evidence")
+    native = [e for e in evidence if e.get("kind") in {"provider_observed_functions_exec", "provider_observed_native_exec"}
+              and e.get("tool") in {"functions.exec", "container.exec", None}
+              and str(e.get("ref") or "").strip() and str(e.get("call_ref") or "").strip()
+              and HEX64.fullmatch(str(e.get("raw_stream_sha256") or ""))]
+    if not native:
+        raise NativeEvidenceMissing("ChatGPT phase lacks matched provider-observed native exec call and result")
+    return meta
+
+
 def verified_work_attachment(job: Mapping[str, Any], plan: Plan) -> dict[str, Any]:
     attachments=job.get("attachment_refs") or []
     if len(attachments) != 1 or not isinstance(attachments[0], dict):
@@ -673,6 +704,57 @@ def ensure_chat_job(queue: QueueClient, plan: Plan, step: Step, research_meta: M
     job.update({"prompt":prompt,"prompt_sha256":sha256_bytes(prompt.encode()),"reasoning_effort":"xhigh",
                 "assigned_employee":"ChatGPT chat-mode native sandbox",
                 "attachment_refs":[portable_attachment_ref(Path(research_meta["path"]), research_meta["sha256"])]})
+    return queue.enqueue(job)
+
+
+def ensure_native_retry_job(queue: QueueClient, plan: Plan, step: Step, original: Mapping[str, Any],
+                            previous: Mapping[str, Any], attempt: int) -> dict[str, Any]:
+    """Enqueue one rhythm-governed repair turn from immutable original inputs."""
+    if not 1 <= attempt < MAX_CHAT_NATIVE_ATTEMPTS:
+        raise ValueError("native repair attempt out of bounds")
+    if previous.get("state") != "complete" or previous.get("id") != phase_job_id(plan, step.step_id, "chatgpt_sandbox", attempt - 1):
+        raise ValueError("native repair predecessor is not definitively complete")
+    proof = original.get("taskflow_plan_receipt") or {}
+    if (original.get("id") != phase_job_id(plan, step.step_id, "chatgpt_sandbox")
+        or original.get("plan_revision") != plan.sha256
+        or (proof and (proof.get("plan_sha256") != plan.sha256
+                       or proof.get("taskflow_step") != step.step_id
+                       or proof.get("phase") != "chatgpt_sandbox"))
+        or original.get("prompt_sha256") != sha256_bytes(str(original.get("prompt") or "").encode())):
+        raise ValueError("original ChatGPT phase does not match immutable plan and prompt")
+    original_refs = original.get("attachment_refs") or []
+    if len(original_refs) != 1 or not isinstance(original_refs[0], dict) or not HEX64.fullmatch(str(original_refs[0].get("sha256") or "")):
+        raise ValueError("original research ZIP reference is invalid")
+    research = queue.get(phase_job_id(plan, step.step_id, "research"))
+    if not research or research.get("state") != "complete" or not any(
+        isinstance(e, dict) and e.get("kind") == "research_zip" and e.get("ref") == original_refs[0]["sha256"]
+        for e in research.get("effect_evidence") or []
+    ):
+        raise ValueError("original research ZIP has no completed D1 source receipt")
+    if original["prompt"] != chatgpt_prompt(plan, step, {"sha256": original_refs[0]["sha256"]}):
+        raise ValueError("original ChatGPT prompt differs from the plan and research ZIP")
+    jid = phase_job_id(plan, step.step_id, "chatgpt_sandbox", attempt)
+    existing = queue.get(jid)
+    if existing:
+        if (existing.get("provider") != "chatgpt.com" or existing.get("plan_revision") != plan.sha256
+            or existing.get("phase") != "chatgpt_sandbox"
+            or existing.get("reason") != f"native_compute_repair_attempt:{attempt}"
+            or existing.get("attachment_refs") != original_refs):
+            raise ValueError("existing native repair job identity or attachment mismatch")
+        return existing
+    prompt = (str(original["prompt"]) + "\n\nNative execution repair: The previous completed turn supplied a ZIP, "
+              "but its provider stream did not show a matched native container.exec or functions.exec call and result. "
+              "Perform the substantive compute in this ChatGPT chat-mode sandbox with its native execution tool. "
+              "Return a fresh single ZIP and in-chat report as instructed above.\n")
+    job = job_base(plan, step, "chatgpt_sandbox", provider="chatgpt.com",
+                   priority=int(original.get("priority") or 0), dependencies=[str(previous["id"])])
+    job.update({"id": jid, "prompt": prompt, "prompt_sha256": sha256_bytes(prompt.encode()),
+                "reasoning_effort": original.get("reasoning_effort") or "xhigh",
+                "assigned_employee": original.get("assigned_employee") or "ChatGPT chat-mode native sandbox",
+                "attachment_refs": json.loads(json.dumps(original_refs)), "phase_attempt": attempt,
+                "reason": f"native_compute_repair_attempt:{attempt}"})
+    job["payload"]["phase_attempt"] = attempt
+    job["payload"]["native_repair_of"] = str(original["id"])
     return queue.enqueue(job)
 
 
@@ -1025,33 +1107,59 @@ def run_once(*, queue: QueueClient, plan: Plan, role: str, secretary: Path, stat
                 action["actions"].append({"step":step.step_id,"phase":"research_begin","ok":False,"error":begun.get("error") or "D1 rejected begin_effect"})
         else:
             action["actions"].append({"phase":"research_claim","ok":False,"error":"claimed job does not match plan and employee"})
-    # Advance completed ChatGPT phase jobs to an external-effect job. Never use ChatGPT completion as TaskFlow completion.
-    for cjob in phase_jobs("chatgpt_sandbox","chatgpt.com","complete"):
-        payload=cjob.get("payload") or {}
-        if (cjob.get("phase") or payload.get("taskflow_phase")) != "chatgpt_sandbox" or (cjob.get("plan_revision") or payload.get("plan_revision")) != plan.sha256: continue
-        step=plan.by_id().get(str(cjob.get("taskflow_step") or payload.get("taskflow_step")))
-        if not step or not active(step): continue
-        path=_artifact_from_chat_job(cjob)
-        if not path: continue
-        try:
-            meta=verify_manifest_zip(path,expected_plan_sha256=plan.sha256,require_external_instructions=True)
-            evidence=[e for e in cjob.get("effect_evidence") or [] if isinstance(e,dict)]
-            matching=[e for e in evidence if e.get("kind")=="chatgpt_sandbox_artifact" and e.get("path")==str(path) and e.get("ref")==meta["sha256"]]
-            if len(matching) != 1: raise ValueError("ChatGPT artifact evidence SHA mismatch")
-            conversation_id=str(cjob.get("conversation_id") or "")
-            if not conversation_id or not all(any(e.get("kind")==kind and e.get("ref")==conversation_id for e in evidence)
-                                              for kind in ("provider_conversation","central_conversation_readback")):
-                raise ValueError("ChatGPT conversation lacks matching central readback evidence")
-            native=[e for e in evidence if e.get("kind") in {"provider_observed_functions_exec","provider_observed_native_exec"}
-                    and e.get("tool") in {"functions.exec","container.exec",None}
-                    and str(e.get("ref") or "").strip() and str(e.get("call_ref") or "").strip()
-                    and HEX64.fullmatch(str(e.get("raw_stream_sha256") or ""))]
-            if not native:
-                raise ValueError("ChatGPT phase lacks matched provider-observed native exec call and result")
-        except Exception as exc:
-            action["actions"].append({"step":step.step_id,"phase":"chatgpt_readback","ok":False,"error":f"{type(exc).__name__}:{exc}"}); continue
-        ejob=ensure_external_job(queue,plan,step,priority,meta,state_root=state_root,external_employee=external_employee)
-        action["actions"].append({"step":step.step_id,"phase":"external_effect","state":ejob.get("state"),"work_zip":meta["sha256"]})
+    # Only a definitive completed provider turn can trigger repair; an ambiguous
+    # in-flight send is never retried here. Every repair is a separate D1 job,
+    # governed by the same worker and historical rhythm as the original turn.
+    for step in plan.steps:
+        if not active(step): continue
+        original = queue.get(phase_job_id(plan, step.step_id, "chatgpt_sandbox"))
+        if not original: continue
+        for attempt in range(MAX_CHAT_NATIVE_ATTEMPTS):
+            jid = phase_job_id(plan, step.step_id, "chatgpt_sandbox", attempt)
+            cjob = original if attempt == 0 else queue.get(jid)
+            if not cjob: break
+            payload = cjob.get("payload") or {}
+            if (cjob.get("id") != jid or cjob.get("provider") != "chatgpt.com"
+                or (cjob.get("phase") or payload.get("taskflow_phase")) != "chatgpt_sandbox"
+                or (cjob.get("plan_revision") or payload.get("plan_revision")) != plan.sha256
+                or (cjob.get("taskflow_step") or payload.get("taskflow_step")) != step.step_id
+                or (attempt and cjob.get("reason") != f"native_compute_repair_attempt:{attempt}")):
+                raise ValueError(f"D1 exact ChatGPT attempt identity mismatch: {step.step_id}/{attempt}")
+            if cjob.get("state") != "complete": break
+            try:
+                meta = verified_chat_completion(cjob, plan)
+                if not meta: break
+            except NativeEvidenceMissing as exc:
+                if attempt + 1 < MAX_CHAT_NATIVE_ATTEMPTS:
+                    try:
+                        retry = ensure_native_retry_job(queue, plan, step, original, cjob, attempt + 1)
+                        action["actions"].append({"step":step.step_id,"phase":"native_compute_repair",
+                                                  "attempt":attempt + 1,"state":retry.get("state"),
+                                                  "job_id":retry["id"]})
+                        if retry.get("state") == "complete":
+                            continue
+                    except Exception as repair_exc:
+                        action["actions"].append({"step":step.step_id,"phase":"native_compute_repair","ok":False,
+                                                  "error":f"{type(repair_exc).__name__}:{repair_exc}"})
+                else:
+                    failure = {"schema":"cognilode.taskflow.native_compute_failure.v1","state":"terminal_failure",
+                               "project":plan.project_id,"plan_sha256":plan.sha256,"step":step.step_id,
+                               "attempt_job_ids":[phase_job_id(plan,step.step_id,"chatgpt_sandbox",n)
+                                                  for n in range(MAX_CHAT_NATIVE_ATTEMPTS)],
+                               "route":"taskflow_native_compute_failure"}
+                    failure_path=state_root/plan.project_id/step.step_id/"native_compute_failure.json"
+                    atomic_json(failure_path,failure)
+                    action["actions"].append({"step":step.step_id,"phase":"native_compute_exhausted",
+                                              "state":"terminal_failure","receipt":str(failure_path),"error":str(exc)})
+                break
+            except Exception as exc:
+                action["actions"].append({"step":step.step_id,"phase":"chatgpt_readback","ok":False,
+                                          "attempt":attempt,"error":f"{type(exc).__name__}:{exc}"})
+                break
+            ejob=ensure_external_job(queue,plan,step,priority,meta,state_root=state_root,external_employee=external_employee)
+            action["actions"].append({"step":step.step_id,"phase":"external_effect","state":ejob.get("state"),
+                                      "work_zip":meta["sha256"],"chat_attempt":attempt})
+            break
     # Reconcile external effects from their durable receipt before considering a new mutation.
     for pending in phase_jobs("external_effect","codex.external-effect","effect_pending"):
         payload=pending.get("payload") or {}

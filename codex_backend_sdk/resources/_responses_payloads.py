@@ -251,7 +251,7 @@ def _event_error_message(event: ResponseStreamEvent) -> str:
     response = _event_response_dict(event)
     error = response.get("error") or getattr(event, "error", None) or {}
     if isinstance(error, dict):
-        return error.get("message", "Response failed")
+        return error.get("message") or getattr(event, "message", None) or "Response failed"
     return str(error)
 
 

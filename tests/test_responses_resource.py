@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+import json
+import pytest
 
 from pydantic import BaseModel
 
@@ -29,6 +31,23 @@ class FakeJSONResponse:
 
     def json(self):
         return self._payload
+
+
+@pytest.mark.parametrize("event", [
+    {"type": "response.failed", "response": {"error": {"message": "response protection is unavailable"}}},
+    {"type": "error", "error": {"message": "response protection is unavailable"}},
+    {"type": "error", "code": "unsupported", "message": "response protection is unavailable"},
+])
+def test_compact_preserves_backend_failure_message(event):
+    class FailingClient(FakeClient):
+        def _post(self, path, **kwargs):
+            self.stream = FakeSSE(['data: ' + json.dumps(event), ''])
+            return self.stream
+
+    client = FailingClient()
+    with pytest.raises(RuntimeError, match="Remote compaction v2 failed: response protection is unavailable"):
+        client.responses.compact(input=[])
+    assert client.stream.closed
 
 
 class FakeClient(OpenAI):

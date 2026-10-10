@@ -13,6 +13,7 @@ from .._utils import _UNSET, _default, _is_given, _jsonable, _reject_backend_uns
 from ._responses_payloads import (
     ResponsesCreateRequest,
     _usage_from_backend,
+    _event_error_message,
     collect_response,
     merge_text_format,
     normalize_input_item,
@@ -337,20 +338,21 @@ class Responses:
         )
         output: list[Any] = []
         completed: dict[str, Any] = {}
-        for event in stream_response_events(response):
-            if event.type == "response.output_item.done":
-                item = getattr(event, "item", None)
-                if isinstance(item, dict):
-                    output.append(item)
-            elif event.type == "response.completed":
-                completed_value = getattr(event, "response", None) or {}
-                completed = (
-                    completed_value
-                    if isinstance(completed_value, dict)
-                    else completed_value.model_dump()
-                )
-            elif event.type in {"response.failed", "error"}:
-                raise RuntimeError("Remote compaction v2 failed")
+        with stream_response_events(response) as events:
+            for event in events:
+                if event.type == "response.output_item.done":
+                    item = getattr(event, "item", None)
+                    if isinstance(item, dict):
+                        output.append(item)
+                elif event.type == "response.completed":
+                    completed_value = getattr(event, "response", None) or {}
+                    completed = (
+                        completed_value
+                        if isinstance(completed_value, dict)
+                        else completed_value.model_dump()
+                    )
+                elif event.type in {"response.failed", "error"}:
+                    raise RuntimeError(f"Remote compaction v2 failed: {_event_error_message(event)}")
 
         compaction_items = [item for item in output if item.get("type") == "compaction"]
         if len(compaction_items) != 1:

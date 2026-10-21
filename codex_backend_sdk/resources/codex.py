@@ -288,7 +288,7 @@ class CodexRateLimitResetCredits:
 
     def list(self) -> RateLimitResetCredits:
         return RateLimitResetCredits.model_validate(
-            self._client._get("/rate-limit-reset-credits")
+            self._client._get_wham("/wham/rate-limit-reset-credits")
         )
 
     def consume(
@@ -308,10 +308,9 @@ class CodexRateLimitResetCredits:
         if credit_id is not None:
             payload["credit_id"] = credit_id
         return ConsumeRateLimitResetCreditResponse.model_validate(
-            self._client._post(
-                "/rate-limit-reset-credits/consume",
-                body=payload,
-            ).json()
+            self._client._post_wham(
+                "/wham/rate-limit-reset-credits/consume", body=payload
+            )
         )
 
     def history(self, *, cursor: str | None = None) -> dict[str, Any]:

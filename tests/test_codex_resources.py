@@ -23,6 +23,21 @@ class FakeCodexClient(OpenAI):
 
     def _get_wham(self, path, *, params=None):
         self.wham_gets.append((path, params))
+        if path == "/wham/rate-limit-reset-credits":
+            return {
+                "available_count": 1,
+                "total_earned_count": 2,
+                "credits": [
+                    {
+                        "id": "credit_1",
+                        "reset_type": "codex_rate_limits",
+                        "status": "available",
+                        "granted_at": "2026-07-01T00:00:00Z",
+                        "expires_at": "2026-08-01T00:00:00Z",
+                        "title": "Full reset",
+                    }
+                ],
+            }
         if path == "/wham/usage":
             return {"rate_limit": {"allowed": True}}
         if path == "/wham/config/requirements":
@@ -75,6 +90,8 @@ class FakeCodexClient(OpenAI):
 
     def _post_wham(self, path, *, body=None, timeout=None):
         self.wham_posts.append((path, body))
+        if path == "/wham/rate-limit-reset-credits/consume":
+            return {"code": "reset", "windows_reset": 2}
         if path == "/wham/tasks":
             return {"task": {"id": "task_2"}}
         if path.startswith("/wham/tasks/task_1/"):
@@ -96,24 +113,6 @@ class FakeCodexClient(OpenAI):
     def _delete_wham(self, path, *, params=None, timeout=None):
         self.wham_deletes.append((path, params))
 
-    def _get(self, path, *, params=None):
-        if path == "/rate-limit-reset-credits":
-            return {
-                "available_count": 1,
-                "total_earned_count": 2,
-                "credits": [
-                    {
-                        "id": "credit_1",
-                        "reset_type": "codex_rate_limits",
-                        "status": "available",
-                        "granted_at": "2026-07-01T00:00:00Z",
-                        "expires_at": "2026-08-01T00:00:00Z",
-                        "title": "Full reset",
-                    }
-                ],
-            }
-        raise AssertionError(f"Unexpected Codex get path: {path}")
-
     def _get_chatgpt(self, path):
         self.chatgpt_gets.append(path)
         if path == "/memories":
@@ -134,8 +133,6 @@ class FakeCodexClient(OpenAI):
             return FakeJSONResponse(
                 {"output": [{"trace_summary": "raw", "memory_summary": "summary"}]}
             )
-        if path == "/rate-limit-reset-credits/consume":
-            return FakeJSONResponse({"code": "reset", "windows_reset": 2})
         raise AssertionError(f"Unexpected Codex post path: {path}")
 
     def _post_chatgpt_raw(self, path, **kwargs):
@@ -171,6 +168,7 @@ def test_codex_rate_limit_reset_credits_list_returns_typed_details():
     assert result.total_earned_count == 2
     assert result.credits[0].id == "credit_1"
     assert result.credits[0].title == "Full reset"
+    assert client.wham_gets == [("/wham/rate-limit-reset-credits", None)]
 
 
 def test_codex_rate_limit_reset_credits_consume_posts_idempotency_and_credit_ids():
@@ -184,11 +182,10 @@ def test_codex_rate_limit_reset_credits_consume_posts_idempotency_and_credit_ids
     assert isinstance(result, ConsumeRateLimitResetCreditResponse)
     assert result.code == "reset"
     assert result.windows_reset == 2
-    assert client.posts == [
+    assert client.wham_posts == [
         (
-            "/rate-limit-reset-credits/consume",
+            "/wham/rate-limit-reset-credits/consume",
             {"redeem_request_id": "redeem_1", "credit_id": "credit_1"},
-            False,
         )
     ]
 

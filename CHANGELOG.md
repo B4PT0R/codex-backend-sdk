@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.5.7] - 2026-10-22
 
 ### Fixed
 - Discover the latest stable Codex CLI version over credential-free HTTPS for

@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import uuid
 from collections.abc import Iterator
-from typing import Any, TYPE_CHECKING
+from contextlib import contextmanager
+from hashlib import sha256
+from typing import Any, Optional, TYPE_CHECKING
 
 from .._models import CompactedResponse, ParsedResponse, Response, ResponseStreamEvent
 from .._streaming import stream_response_events
@@ -23,25 +25,46 @@ from ._responses_payloads import (
     pydantic_to_format,
 )
 
+from ._responses_routing import ResponsesTurnState, TURN_STATE_HEADER, header_value
+
 if TYPE_CHECKING:
     from .._client import CodexClient
 
 
-def _cache_affinity_headers(payload, extra_headers):
+def _cache_affinity_headers(payload, extra_headers, default_headers=None):
     headers = dict(extra_headers or {})
     # Codex routes ChatGPT prompt caches using this header, not only the body key.
     key = payload.get("prompt_cache_key")
-    if key and not any(name.lower() == "session-id" for name in headers):
+    if (
+        key
+        and not any(name.lower() == "session-id" for name in headers)
+        and not any(name.lower() == "session-id" for name in (default_headers or {}))
+    ):
         headers["session-id"] = key
     return headers or None
 
 
 class Responses:
-    def __init__(self, client: CodexClient) -> None:
+    def __init__(self, client: CodexClient, *, _turn_state: Optional[ResponsesTurnState] = None) -> None:
         from .responses_websocket import ResponsesWebSocket
 
         self._client = client
+        self._turn_state = _turn_state
         self.websocket = ResponsesWebSocket(client)
+
+    @contextmanager
+    def turn(self) -> Iterator[Responses]:
+        """Yield isolated HTTP Responses routing for one logical agent turn.
+
+        Reuse this resource for generations/retries within that turn, not across
+        turns. No routing token is persisted or placed in the model's input.
+        Compaction is a separate backend turn and does not inherit this state.
+        """
+        state = ResponsesTurnState()
+        try:
+            yield Responses(self._client, _turn_state=state)
+        finally:
+            state.close()
 
     def create(
         self,
@@ -123,15 +146,50 @@ class Responses:
         payload = dict(request.payload)
         if extra_body:
             payload.update(_jsonable(extra_body))
+        defaults = self._client._session.headers
+        headers = _cache_affinity_headers(payload, extra_headers, defaults) or {}
+        state = self._turn_state
+        if state is not None:
+            def effective_header(name):
+                return header_value(headers, name, header_value(defaults, name))
+
+            # Also invalidate for explicit per-request authentication overrides. Keep
+            # only a fingerprint, never credentials, in this ephemeral routing state.
+            identity = (
+                self._client._auth_revision,
+                sha256(repr((
+                    effective_header("authorization"), effective_header("chatgpt-account-id"),
+                )).encode()).digest(),
+                effective_header("session-id"),
+                payload.get("prompt_cache_key"),
+            )
+            epoch, value = state.prepare(identity)
+            explicit = effective_header(TURN_STATE_HEADER)
+            if explicit is not None:
+                state.capture(epoch, explicit)
+            elif value:
+                headers[TURN_STATE_HEADER] = value
+
         response = self._client._post(
             "/responses",
             body=payload,
             stream=True,
-            headers=_cache_affinity_headers(payload, extra_headers),
+            headers=headers or None,
             params=extra_query,
             timeout=timeout,
         )
-        events = stream_response_events(response)
+
+        def capture(headers):
+            if state is not None and self._client._auth_revision == identity[0]:
+                state.capture(epoch, header_value(headers, TURN_STATE_HEADER))
+
+        capture(getattr(response, "headers", {}))
+
+        def on_event(event):
+            if event.type == "response.metadata":
+                capture(getattr(event, "headers", None))
+
+        events = stream_response_events(response, on_event=on_event if state is not None else None)
         stream_enabled = bool(stream) if _is_given(stream) else False
 
         if stream_enabled:
@@ -325,7 +383,7 @@ class Responses:
         if not payload["input"] or payload["input"][-1].get("type") != "compaction_trigger":
             payload["input"].append({"type": "compaction_trigger"})
 
-        headers = _cache_affinity_headers(payload, extra_headers) or {}
+        headers = _cache_affinity_headers(payload, extra_headers, self._client._session.headers) or {}
         beta_features = [
             value.strip()
             for value in headers.get("x-codex-beta-features", "").split(",")

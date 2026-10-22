@@ -48,6 +48,7 @@ class CodexClient:
         from .resources.responses import Responses
 
         self._store = store
+        self._auth_revision = 0
         self._timeout = timeout
         self._max_retries = max_retries
         self._retry_base_delay = retry_base_delay
@@ -226,6 +227,7 @@ class CodexClient:
 
         cleared = clear_tokens()
         self._store = None
+        self._auth_revision += 1
         self._session.headers.pop("Authorization", None)
         self._session.headers.pop("ChatGPT-Account-ID", None)
         return cleared
@@ -245,6 +247,7 @@ class CodexClient:
         return self.logout()
 
     def _set_store(self, store: TokenStore) -> None:
+        self._auth_revision += 1
         self._store = store
         self._session.headers.update(self._auth_headers())
 

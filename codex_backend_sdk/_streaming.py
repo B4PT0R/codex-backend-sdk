@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import requests
 
@@ -14,8 +14,12 @@ from ._models import ResponseStreamEvent
 class ResponseEventStream(Iterator[ResponseStreamEvent]):
     """Closeable/context-managed event stream compatible with OpenAI streams."""
 
-    def __init__(self, response: requests.Response) -> None:
+    def __init__(
+        self, response: requests.Response, *,
+        on_event: Optional[Callable[[ResponseStreamEvent], None]] = None,
+    ) -> None:
         self.response = response
+        self._on_event = on_event
         self._events = (
             ResponseStreamEvent.model_validate(payload)
             for payload in iter_sse_payloads(response)
@@ -25,7 +29,10 @@ class ResponseEventStream(Iterator[ResponseStreamEvent]):
         return self
 
     def __next__(self) -> ResponseStreamEvent:
-        return next(self._events)
+        event = next(self._events)
+        if self._on_event is not None:
+            self._on_event(event)
+        return event
 
     def close(self) -> None:
         close = getattr(self.response, "close", None)
@@ -39,8 +46,11 @@ class ResponseEventStream(Iterator[ResponseStreamEvent]):
         self.close()
 
 
-def stream_response_events(response: requests.Response) -> ResponseEventStream:
-    return ResponseEventStream(response)
+def stream_response_events(
+    response: requests.Response, *,
+    on_event: Optional[Callable[[ResponseStreamEvent], None]] = None,
+) -> ResponseEventStream:
+    return ResponseEventStream(response, on_event=on_event)
 
 
 def iter_sse_payloads(response: requests.Response) -> Iterator[dict[str, Any]]:

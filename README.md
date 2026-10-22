@@ -463,6 +463,31 @@ The ChatGPT read-aloud service is smaller than the public speech API: it exposes
 language and playback speed, not arbitrary model and voice selection. It can
 return a typed in-memory object, bytes, `BytesIO`, a data URI, or a file path.
 
+### Turn-scoped HTTP routing
+
+For an agent turn with several generations (tools or retries), use an isolated
+Responses resource. Continue sending the complete input as usual:
+
+```python
+with client.responses.turn() as turn:
+    first = turn.create(input=items, prompt_cache_key="conversation-id")
+    # Append model/tool results to items, then generate again in the same turn.
+    following = turn.create(input=items, prompt_cache_key="conversation-id")
+```
+
+The resource captures the first `x-codex-turn-state` from HTTP response headers
+or `response.metadata` events and replays it unchanged within this scope. The
+opaque routing token is never added to model input or persisted. Leaving the
+scope closes it; a new turn starts without the previous token. Authentication
+or cache-affinity changes invalidate it. Separate scopes do not share tokens,
+even on the same client. Streaming callers must consume the metadata event for
+an SSE-only token to be captured. Compaction remains a separate backend request
+and does not inherit the turn token; this scope does not manage WebSockets.
+
+`prompt_cache_key` also supplies the HTTP `session-id` affinity header unless
+an explicit request/client header overrides it (case-insensitively). These are
+routing mechanisms, not a guarantee of a cache hit or reduced quota usage.
+
 ## Advanced transports
 
 ### Realtime voice

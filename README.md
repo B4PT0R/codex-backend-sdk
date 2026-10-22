@@ -23,6 +23,12 @@ The package intentionally separates three kinds of API:
 ## Install
 
 ```bash
+pip install --upgrade codex-backend-sdk
+```
+
+For an editable checkout:
+
+```bash
 git clone https://github.com/B4PT0R/codex-backend-sdk.git
 cd codex-backend-sdk
 pip install -e .
@@ -508,9 +514,14 @@ with client.live.sideband.connect(session_id=live.session.id) as sideband:
         print(event.type)
 ```
 
-Live probes confirmed `gpt-live-1-codex` and
-`gpt-live-1-boulder-alpha`. They are Codex Realtime v3 snapshots, not aliases
-for the public `gpt-live-1` model. `client.live` follows the current
+Model identifiers are forwarded unchanged: the backend decides which models
+are available to your account, so new Codex models do not require an SDK update.
+Earlier call-creation probes accepted `gpt-live-1-codex` and
+`gpt-live-1-boulder-alpha`; these examples are not an exhaustive catalog.
+A `gpt-live-1.1` probe on October 22, 2026 also returned an SDP answer and
+connected WebRTC, but the server then rejected the voice session with
+`forbidden: Voice session access denied.` Call creation alone does not prove
+that an account can receive model responses. `client.live` follows the current
 `openai-python` creation, response, and sideband idioms while adapting them to
 the ChatGPT OAuth call transport.
 

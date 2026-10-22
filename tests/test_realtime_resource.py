@@ -59,20 +59,26 @@ class FakeRealtimeClient(OpenAI):
 
 
 class ErrorRealtimeClient(FakeRealtimeClient):
+    error_message = "Unknown parameter: phase"
+
     def _post_raw(self, path, **kwargs):
         response = requests.Response()
         response.status_code = 400
         response.url = "https://chatgpt.com/backend-api/codex/realtime/calls"
         response.headers["x-request-id"] = "request-123"
-        response._content = b'{"error":{"message":"Unknown parameter: phase"}}'
+        response._content = json.dumps({"error": {"message": self.error_message}}).encode()
         request = requests.Request("POST", response.url).prepare()
         raise requests.HTTPError("400 Client Error", response=response, request=request)
 
 
-def test_realtime_calls_create_v3_accepts_confirmed_models_and_sets_alpha_header():
+@pytest.mark.parametrize("model", [
+    "gpt-live-1-codex", "gpt-live-1-boulder-alpha", "gpt-live-1.1",
+    "future-model-not-in-any-local-catalog",
+])
+def test_realtime_calls_create_v3_forwards_any_model_and_sets_alpha_header(model):
     client = FakeRealtimeClient()
 
-    for model in ("gpt-live-1-codex", "gpt-live-1-boulder-alpha"):
+    for _ in range(2):
         client.realtime.calls.create_v3(
             sdp="offer-sdp",
             session={"model": model, "instructions": "Be concise."},
@@ -81,26 +87,17 @@ def test_realtime_calls_create_v3_accepts_confirmed_models_and_sets_alpha_header
     path, kwargs = client.raw_posts[0]
     assert path == "/realtime/calls"
     assert kwargs["body"]["session"] == {
-        "model": "gpt-live-1-codex",
+        "model": model,
         "instructions": "Be concise.",
     }
     assert kwargs["headers"]["openai-alpha"] == "quicksilver=v2"
     assert kwargs["headers"]["session-id"]
     assert kwargs["headers"]["thread-id"]
     assert kwargs["params"] == {"intent": "quicksilver", "architecture": "avas"}
-    assert client.raw_posts[1][1]["body"]["session"]["model"] == (
-        "gpt-live-1-boulder-alpha"
-    )
-
-    try:
-        client.realtime.calls.create_v3(
-            sdp="offer-sdp",
-            session={"model": "gpt-live"},
-        )
-    except ValueError as exc:
-        assert "gpt-live" in str(exc)
-    else:
-        raise AssertionError("Expected an unsupported gpt-live alias to be rejected")
+    headers = kwargs["headers"]
+    second_headers = client.raw_posts[1][1]["headers"]
+    assert second_headers["session-id"] != headers["session-id"]
+    assert second_headers["thread-id"] != headers["thread-id"]
 
 
 def test_live_create_uses_official_shape_over_codex_call_transport():
@@ -138,17 +135,22 @@ def test_live_create_rejects_non_webrtc_transport():
         )
 
 
-def test_realtime_calls_create_v3_exposes_backend_error_detail():
+@pytest.mark.parametrize("model, backend_message", [
+    ("gpt-live-1-codex", "Unknown parameter: phase"),
+    ("future-model-not-in-any-local-catalog", "Model not found"),
+])
+def test_realtime_calls_create_v3_exposes_backend_error_detail(model, backend_message):
     client = ErrorRealtimeClient()
+    client.error_message = backend_message
 
     with pytest.raises(requests.HTTPError) as exc_info:
         client.realtime.calls.create_v3(
             sdp="offer-sdp",
-            session={"model": "gpt-live-1-codex"},
+            session={"model": model},
         )
 
     message = str(exc_info.value)
-    assert "Unknown parameter: phase" in message
+    assert backend_message in message
     assert "request_id=request-123" in message
 
 

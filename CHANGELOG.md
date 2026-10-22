@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.5] - 2026-10-22
+
+### Added
+- Added `client.responses.turn()` for ephemeral sticky routing within one logical
+  HTTP Responses turn, isolated across concurrent turns and invalidated when
+  authentication or cache affinity changes.
+
+### Changed
+- Forward Realtime model identifiers unchanged instead of maintaining a local
+  allowlist. Newly available Codex models, including `gpt-live-1.1`, no longer
+  require an SDK update; the backend determines availability and authorization.
+
+### Fixed
+- Supply the HTTP `session-id` cache-affinity header from `prompt_cache_key`
+  unless an explicit request or client header already sets it.
+- Route reset-credit requests through the authenticated WHAM API.
+- Preserve backend remote-compaction errors and close the response stream.
+- Align the exported package version with the distribution metadata.
+
 ## [0.5.4] - 2026-09-24
 
 ### Fixed

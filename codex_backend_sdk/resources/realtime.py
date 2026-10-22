@@ -24,12 +24,6 @@ if TYPE_CHECKING:
     from .._client import CodexClient
 
 
-CODEX_REALTIME_V3_MODELS = frozenset({
-    "gpt-live-1-codex",
-    "gpt-live-1-boulder-alpha",
-})
-
-
 class Realtime:
     """Realtime resources matching the official OpenAI SDK surface where present."""
 
@@ -362,9 +356,8 @@ class RealtimeSideband:
 class RealtimeCalls:
     """Codex WebRTC call creation over ChatGPT OAuth.
 
-    Realtime v3 uses the JSON call shape with one of the explicitly supported
-    Codex ``gpt-live`` snapshots. Arbitrary ``gpt-live`` aliases are not accepted
-    on this OAuth-authenticated route.
+    Realtime v3 uses the JSON call shape. Model identifiers are forwarded
+    unchanged; availability and validation belong to the backend.
     """
     def __init__(self, client: CodexClient) -> None:
         self._client = client
@@ -381,7 +374,7 @@ class RealtimeCalls:
         extra_body: Any = None,
         timeout: Any = _UNSET,
     ) -> RealtimeCallResponse:
-        """Create a Codex Realtime v3 call using a confirmed Codex model.
+        """Create a Codex Realtime v3 call with a backend-validated model.
 
         The ChatGPT backend requires both ``session-id`` and ``thread-id`` on
         v3 call creation. Fresh UUIDs are generated when callers do not need
@@ -393,13 +386,6 @@ class RealtimeCalls:
         if not isinstance(session_payload, dict):
             raise TypeError("Expected `session` to serialize to a JSON object.")
         session_payload.pop("id", None)
-        model = session_payload.get("model")
-        if model not in CODEX_REALTIME_V3_MODELS:
-            supported = ", ".join(sorted(CODEX_REALTIME_V3_MODELS))
-            raise ValueError(
-                "Codex Realtime v3 over ChatGPT OAuth requires "
-                f"one of these `session.model` values: {supported}."
-            )
         headers = {
             "session-id": session_id or str(uuid.uuid4()),
             "thread-id": thread_id or str(uuid.uuid4()),

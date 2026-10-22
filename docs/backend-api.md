@@ -344,12 +344,18 @@ with client.live.sideband.connect(session_id=live.session.id) as sideband:
 
 For Realtime v3, Codex sends `openai-alpha: quicksilver=v2`, the AVAS query
 parameters `intent=quicksilver&architecture=avas`, and a `gpt-live` session.
-Live WebRTC call-creation probes against the ChatGPT OAuth route validated both
+Earlier WebRTC call-creation probes against the ChatGPT OAuth route accepted
 `gpt-live-1-codex` and `gpt-live-1-boulder-alpha`: each returned an SDP answer
-and a Realtime call id. The aliases `gpt-live`, `gpt-live-1`,
-`gpt-live-latest`, and an unknown suffix returned HTTP 400. `create_v3`
-therefore accepts exactly the two confirmed identifiers rather than every
-`gpt-live` prefix.
+and a Realtime call id. Some other identifiers returned HTTP 400 at that time.
+The SDK does not encode these observations as an allowlist: `create_v3` forwards
+model identifiers unchanged and preserves backend errors. Availability depends
+on the account and backend rollout.
+
+On October 22, 2026, a `gpt-live-1.1` probe returned an SDP answer and opened the
+WebRTC data channel using a synthetic silent audio track (no microphone).
+The server subsequently emitted `forbidden: Voice session access denied.`
+No model reply was received; successful call creation is not proof of voice
+session authorization.
 
 This is distinct from the public Realtime API documented for developer API keys.
 On the OpenAI API host, the same Codex implementation uses `/v1/live` for the

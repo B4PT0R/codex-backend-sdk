@@ -26,6 +26,12 @@ The package intentionally separates three kinds of API:
 pip install --upgrade codex-backend-sdk
 ```
 
+Version **0.5.8** aligns the SDK with Codex source commit `0eb98b4617`:
+WebSocket interruption, message replay fields, numeric reasoning efforts, and
+scoped installed-plugin pagination. See the [source audit](docs/codex-source-audit.md)
+for verified contracts and the separately inventoried, unsupported cloud gRPC
+transport.
+
 For an editable checkout:
 
 ```bash
@@ -155,6 +161,18 @@ with client.responses.websocket.connect() as ws:
         if event.get("type") == "response.output_text.delta":
             print(event.get("delta", ""), end="")
 ```
+
+To stop an active WebSocket response, call `ws.interrupt()` after receiving
+`response.created`, including from another thread. Keep consuming events until
+both `response.interrupt.accepted` and the terminal response event have arrived
+before reusing the connection. Closing an unfinished event iterator closes the
+connection. Replayed messages retain their IDs, phase, status, encrypted content,
+and backend metadata.
+
+Custom numeric reasoning budgets are also supported:
+`reasoning={"effort": 4096, "context": "all_turns"}`. Numeric strings such as
+`"4096"` are encoded as JSON integers, matching Codex; model support is determined
+by the backend.
 
 ### Maintain a multi-turn conversation
 

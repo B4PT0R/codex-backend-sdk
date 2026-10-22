@@ -4,6 +4,11 @@ This is the living implementation matrix for backend surfaces found in the
 official Codex and Codex Desktop clients. The source snapshot and discovery
 method are recorded in `desktop-endpoint-inventory.md`.
 
+The subsequent [2026-10-22 Codex source audit](codex-source-audit.md) records
+compatibility through `0eb98b46176fd41fc285e5e2f82218bf0ccd70f5`, including
+WebSocket interruption, message replay fields, numeric reasoning, scoped plugin
+pagination, and the separately inventoried native cloud gRPC transport.
+
 Statuses:
 
 - **live**: exercised against the backend with Codex OAuth;

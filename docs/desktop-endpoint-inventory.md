@@ -5,6 +5,10 @@ routes referenced by the official Codex Desktop application but not necessarily
 by `codex-rs`. It is an implementation survey, not a stability guarantee or an
 assertion that every route is enabled for every account.
 
+For the later Codex checkout update through `0eb98b4617`, see the
+[2026-10-22 source audit](codex-source-audit.md). That audit does not replace or
+refresh the packaged Desktop snapshot recorded below.
+
 ## Audited snapshot and method
 
 - Codex checkout: `openai/codex` at

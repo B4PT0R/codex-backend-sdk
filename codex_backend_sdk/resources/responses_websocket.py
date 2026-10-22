@@ -38,6 +38,10 @@ class ResponsesWebSocketConnection:
         self._socket = socket
         self.url = url
         self._request_lock = threading.Lock()
+        self._state_lock = threading.RLock()
+        self._response_id: str | None = None
+        self._interrupt_requested = False
+        self._interrupt_pending = False
         self.closed = False
         headers = _handshake_headers(socket)
         self.reasoning_included = "x-reasoning-included" in headers
@@ -68,32 +72,59 @@ class ResponsesWebSocketConnection:
             raise RuntimeError(
                 "Responses WebSocket connection already has an active response."
             )
+        finished = False
         try:
-            self._socket.send(encoded)
+            with self._state_lock:
+                self._response_id = None
+                self._interrupt_requested = False
+                self._interrupt_pending = False
+                self._socket.send(encoded)
+            terminal = False
             while True:
                 raw = self._socket.recv()
                 if raw in {None, "", b""}:
-                    self.closed = True
                     raise RuntimeError(
                         "Responses WebSocket closed before a terminal response event."
                     )
                 if isinstance(raw, bytes):
-                    self.closed = True
                     raise RuntimeError("Responses WebSocket returned unexpected binary data.")
                 try:
                     event = json.loads(raw)
                 except (TypeError, json.JSONDecodeError) as exc:
-                    self.closed = True
                     raise RuntimeError("Responses WebSocket returned invalid JSON.") from exc
                 if not isinstance(event, dict) or not isinstance(event.get("type"), str):
-                    self.closed = True
                     raise RuntimeError(
                         "Responses WebSocket returned an invalid event envelope."
                     )
                 if event["type"] == "error":
                     raise _event_error(event)
+                with self._state_lock:
+                    if event["type"] == "response.created":
+                        response = event.get("response")
+                        response_id = response.get("id") if isinstance(response, dict) else None
+                        if isinstance(response_id, str) and response_id:
+                            self._response_id = response_id
+                    elif event["type"] in {
+                        "response.interrupt.accepted", "response.interrupt.failed"
+                    }:
+                        if (
+                            not self._interrupt_pending
+                            or event.get("response_id") != self._response_id
+                        ):
+                            raise RuntimeError("Unexpected response interruption acknowledgement.")
+                        if event["type"] == "response.interrupt.failed":
+                            raise RuntimeError("Response interruption was rejected.")
+                        self._interrupt_pending = False
+                    if event["type"] in _TERMINAL_EVENTS:
+                        terminal = True
+                        # Prevent a late interrupt after completion while draining its ack.
+                        self._interrupt_requested = True
+                    done = terminal and not self._interrupt_pending
+                    if done:
+                        self._response_id = None
+                        finished = True
                 yield event
-                if event["type"] in _TERMINAL_EVENTS:
+                if done:
                     return
         except Exception:
             if not self.closed:
@@ -103,7 +134,37 @@ class ResponsesWebSocketConnection:
                     self.closed = True
             raise
         finally:
-            self._request_lock.release()
+            try:
+                with self._state_lock:
+                    self._response_id = None
+                    if not finished:
+                        self.close()
+            finally:
+                self._request_lock.release()
+
+    def interrupt(self) -> None:
+        """Interrupt the active response, discarding partial items.
+
+        Call after ``response.created``, including from another thread while
+        reading events. Continue consuming through both the acknowledgement
+        and terminal response event before reusing the connection.
+        """
+        with self._state_lock:
+            if self.closed:
+                raise RuntimeError("Responses WebSocket connection is closed.")
+            if self._response_id is None or self._interrupt_requested:
+                raise RuntimeError("No active response is available to interrupt.")
+            self._interrupt_requested = True
+            self._interrupt_pending = True
+            try:
+                self._socket.send(json.dumps({
+                    "type": "response.interrupt",
+                    "response_id": self._response_id,
+                    "mode": "discard_partial_items",
+                }, separators=(",", ":")))
+            except Exception:
+                self.close()
+                raise
 
     def create(self, request: Mapping[str, Any]) -> Iterator[dict[str, Any]]:
         """Alias for :meth:`events` using Responses resource terminology."""

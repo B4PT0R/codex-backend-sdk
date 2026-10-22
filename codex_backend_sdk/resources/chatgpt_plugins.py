@@ -106,10 +106,8 @@ class ChatGPTPlugins:
         page_token: str | None = None,
         include_download_urls: bool = False,
     ) -> dict[str, Any]:
-        params: dict[str, Any] = {}
-        if scope is None:
-            params["limit"] = _positive(limit, "limit")
-        else:
+        params: dict[str, Any] = {"limit": _positive(limit, "limit")}
+        if scope is not None:
             params["scope"] = _scope(scope)
         if page_token is not None:
             params["pageToken"] = _required(page_token, "page_token")

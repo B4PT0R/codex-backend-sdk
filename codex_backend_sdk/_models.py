@@ -7,12 +7,12 @@ import time
 from collections.abc import Iterator
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Generic, Literal, Optional, TypeVar
+from typing import Any, Generic, Literal, Optional, TypeVar, Union
 
 import requests
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-ReasoningEffort = Literal["minimal", "low", "medium", "high", "xhigh"]
+ReasoningEffort = Union[Literal["none", "minimal", "low", "medium", "high", "xhigh"], str, int]
 ReasoningSummary = Literal["concise", "detailed", "auto"]
 Verbosity = Literal["low", "medium", "high"]
 ServiceTier = Literal["flex", "priority"]

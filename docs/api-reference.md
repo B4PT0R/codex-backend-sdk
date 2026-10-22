@@ -110,6 +110,13 @@ Supported backend fields are `input`, `model`, `instructions`, `include`,
 iterator; otherwise the SDK collects the mandatory backend SSE stream into a
 typed `Response`.
 
+`reasoning` dictionaries preserve additive backend controls such as
+`context="all_turns"`. Numeric custom effort strings (for example `"4096"`)
+are serialized as unsigned 64-bit JSON integers, matching Codex; named efforts
+remain strings. This also applies to compaction. Message history retains
+backend replay fields (`id`, `status`, `phase`, `encrypted_content`, and
+`internal_chat_message_metadata_passthrough`) and content-part metadata.
+
 For HTTP `create`, `parse` and `compact` requests, a nonempty `prompt_cache_key`
 also supplies the `session-id` header used by the ChatGPT backend for cache
 affinity. An explicit `session-id` in `extra_headers` takes precedence
@@ -165,11 +172,20 @@ Connection methods:
 | --- | --- | --- |
 | `create(request)` | raw Responses request mapping | iterator of raw event dictionaries |
 | `events(request)` | raw `response.create` event or request mapping | iterator through terminal completion/error |
+| `interrupt()` | none; active response must have emitted `response.created` | sends `response.interrupt` with `discard_partial_items` |
 | `close()` | none | `None` |
 
 The connection is a context manager and is reusable for sequential, not
 concurrent, turns. Backend error envelopes raise `ResponsesWebSocketError` with
-`code`, `message`, `event`, and optional `param`.
+`code`, the exception message, `event`, and optional `status`.
+
+After `interrupt()`, keep consuming events through both
+`response.interrupt.accepted` and the terminal response event. They may arrive
+in either order. The acknowledgement must match the active response ID;
+rejection or an invalid acknowledgement closes the connection. You can call
+`interrupt()` from another thread while consuming the stream. Abandoning an
+unfinished event iterator also closes the connection to prevent unread events
+from leaking into the next request.
 
 ### Models
 

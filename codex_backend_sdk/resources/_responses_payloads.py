@@ -16,7 +16,7 @@ from .._models import (
     ResponseUsage,
     TokenDetails,
 )
-from .._utils import _UNSET, _default, _is_given, _jsonable
+from .._utils import _default, _is_given, _jsonable
 
 
 class ResponsesCreateRequest(CodexBaseModel):
@@ -169,7 +169,15 @@ def normalize_input_item(item: Any) -> dict[str, Any]:
             {"type": "input_text", "text": part} if isinstance(part, str) else part
             for part in content
         ]
-    return _message(role, content)
+    message = _message(role, content)
+    # Preserve backend replay fields while still excluding local harness-only keys.
+    for key in (
+        "id", "status", "phase", "encrypted_content",
+        "internal_chat_message_metadata_passthrough",
+    ):
+        if key in raw:
+            message[key] = raw[key]
+    return message
 
 
 def normalize_tools(tools: Any) -> list[dict[str, Any]]:
@@ -181,12 +189,22 @@ def normalize_tools(tools: Any) -> list[dict[str, Any]]:
 def normalize_reasoning(reasoning: Any) -> dict[str, Any]:
     reasoning = _jsonable(reasoning)
     if isinstance(reasoning, dict):
-        return {key: value for key, value in reasoning.items() if value is not None}
-    return {
-        key: value
-        for key in ("effort", "summary")
-        if (value := getattr(reasoning, key, None)) is not None
-    }
+        normalized = {key: value for key, value in reasoning.items() if value is not None}
+    else:
+        normalized = {
+            key: value
+            for key in ("effort", "summary", "context")
+            if (value := getattr(reasoning, key, None)) is not None
+        }
+    effort = normalized.get("effort")
+    # Codex serializes numeric custom efforts as unsigned 64-bit JSON numbers.
+    if isinstance(effort, str) and effort.isascii():
+        digits = effort.removeprefix("+")
+        if digits.isdecimal() and len(digits.lstrip("0")) <= 20:
+            numeric = int(digits.lstrip("0") or "0")
+            if numeric <= 2**64 - 1:
+                normalized["effort"] = numeric
+    return normalized
 
 
 def normalize_text(text: Any) -> dict[str, Any]:

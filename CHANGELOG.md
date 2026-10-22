@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.8] - 2026-10-22
+
+### Added
+- Responses WebSocket `interrupt()` with active-response tracking,
+  acknowledgement validation, and draining before socket reuse.
+- Source compatibility audit against Codex `0eb98b4617`, with native cloud
+  gRPC Resume/Attach explicitly inventoried as unsupported.
+
+### Fixed
+- Preserve message IDs, status, phase, encrypted content, and backend metadata
+  when replaying Responses history; retire abandoned WebSocket streams.
+- Serialize numeric custom reasoning effort strings as unsigned 64-bit JSON
+  integers and preserve reasoning context on attribute-based controls.
+- Send and validate installed-plugin pagination limits with scoped requests.
+
 ## [0.5.7] - 2026-10-22
 
 ### Fixed

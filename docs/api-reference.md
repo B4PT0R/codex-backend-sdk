@@ -110,6 +110,12 @@ Supported backend fields are `input`, `model`, `instructions`, `include`,
 iterator; otherwise the SDK collects the mandatory backend SSE stream into a
 typed `Response`.
 
+For HTTP `create`, `parse` and `compact` requests, a nonempty `prompt_cache_key`
+also supplies the `session-id` header used by the ChatGPT backend for cache
+affinity. An explicit `session-id` in `extra_headers` takes precedence
+(case-insensitively). This preserves routing identity; it does not guarantee a
+cache hit. WebSocket callers supply session headers at connection time.
+
 The OpenAI-compatible signature also accepts the following names so it can
 reject them clearly: `background`, `context_management`, `conversation`,
 `max_output_tokens`, `max_tool_calls`, `metadata`, `previous_response_id`,

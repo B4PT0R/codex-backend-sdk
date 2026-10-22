@@ -465,3 +465,37 @@ def test_responses_create_rejects_official_params_not_exposed_by_codex_backend()
         assert "temperature" in str(exc)
     else:
         raise AssertionError("temperature should be rejected before hitting the backend")
+
+
+@pytest.mark.parametrize("method", ["create", "parse", "compact"])
+@pytest.mark.parametrize("extra_headers", [None, {"x-test": "keep"}, {"Session-ID": "explicit"}])
+def test_http_cache_affinity_tracks_body_key_without_overriding_headers(method, extra_headers):
+    client = FakeClient()
+    original = dict(extra_headers or {})
+    for _ in range(2):
+        getattr(client.responses, method)(
+            input=[{"role": "user", "content": "Hi"}],
+            prompt_cache_key="stable-cache-key", extra_headers=extra_headers,
+        )
+    for _, payload, _, options in client.posts:
+        assert payload["prompt_cache_key"] == "stable-cache-key"
+        headers = options["headers"]
+        sessions = [value for name, value in headers.items() if name.lower() == "session-id"]
+        assert sessions == ["explicit" if "Session-ID" in original else "stable-cache-key"]
+        assert all(headers[name] == value for name, value in original.items())
+    assert dict(extra_headers or {}) == original
+
+
+@pytest.mark.parametrize("key", [None, ""])
+def test_http_cache_affinity_does_not_invent_a_session_without_a_key(key):
+    client = FakeClient()
+    client.responses.create(input="Hi", prompt_cache_key=key)
+    assert client.posts[0][3]["headers"] is None
+
+
+def test_http_cache_affinity_uses_final_body_key():
+    client = FakeClient()
+    client.responses.create(
+        input="Hi", prompt_cache_key="original", extra_body={"prompt_cache_key": "final"},
+    )
+    assert client.posts[0][3]["headers"] == {"session-id": "final"}

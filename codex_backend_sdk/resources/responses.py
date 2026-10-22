@@ -27,6 +27,15 @@ if TYPE_CHECKING:
     from .._client import CodexClient
 
 
+def _cache_affinity_headers(payload, extra_headers):
+    headers = dict(extra_headers or {})
+    # Codex routes ChatGPT prompt caches using this header, not only the body key.
+    key = payload.get("prompt_cache_key")
+    if key and not any(name.lower() == "session-id" for name in headers):
+        headers["session-id"] = key
+    return headers or None
+
+
 class Responses:
     def __init__(self, client: CodexClient) -> None:
         from .responses_websocket import ResponsesWebSocket
@@ -118,7 +127,7 @@ class Responses:
             "/responses",
             body=payload,
             stream=True,
-            headers=extra_headers,
+            headers=_cache_affinity_headers(payload, extra_headers),
             params=extra_query,
             timeout=timeout,
         )
@@ -316,7 +325,7 @@ class Responses:
         if not payload["input"] or payload["input"][-1].get("type") != "compaction_trigger":
             payload["input"].append({"type": "compaction_trigger"})
 
-        headers = dict(extra_headers or {})
+        headers = _cache_affinity_headers(payload, extra_headers) or {}
         beta_features = [
             value.strip()
             for value in headers.get("x-codex-beta-features", "").split(",")

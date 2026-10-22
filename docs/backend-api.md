@@ -78,7 +78,11 @@ List models available to this account.
 **SDK method**: `client.models.list()` / `client.models.retrieve(model)`
 
 **Query params**
-- `client_version` — Codex CLI protocol/client version string (e.g. `"0.130.0"`).
+- `client_version` — Codex CLI version string. The SDK discovers the latest stable
+  version from the public npm registry over HTTPS (24-hour in-process cache;
+  three-second timeout; last-known/bundled fallback with five-minute retry
+  backoff). Override with `extra_query={"client_version": "0.159.2"}` to skip
+  discovery. No Node/npm installation is required.
 
 **Response** — JSON `{ "models": [ ModelObject, … ] }`
 

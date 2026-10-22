@@ -5,6 +5,12 @@ import pytest
 from pydantic import BaseModel
 
 from codex_backend_sdk import OpenAI, ParsedResponse, Response
+from codex_backend_sdk.resources import models as models_resource
+
+
+@pytest.fixture(autouse=True)
+def stable_catalog_version(monkeypatch):
+    monkeypatch.setattr(models_resource, "codex_client_version", lambda: "0.163.0")
 
 
 class FakeSSE:
@@ -363,10 +369,31 @@ def test_models_resource_forwards_official_request_options():
 
     assert client.gets[1] == (
         "/models",
-        {"client_version": "0.130.0", "preview": "1"},
+        {"client_version": "0.163.0", "preview": "1"},
         {"x-test": "header"},
         19,
     )
+
+
+
+def test_explicit_catalog_version_skips_discovery_and_does_not_replace_default_cache(monkeypatch):
+    client = FakeClient()
+    default = client.models.list()
+    def unexpected_lookup():
+        raise AssertionError("Explicit version must not contact registry")
+    monkeypatch.setattr(models_resource, "codex_client_version", unexpected_lookup)
+    custom = client.models.list(extra_query={"client_version": "0.159.2"})
+    assert custom is not default
+    assert client.gets[-1][1] == {"client_version": "0.159.2"}
+    assert client.models.list() is default
+
+
+def test_forced_catalog_refresh_resolves_version_again(monkeypatch):
+    client = FakeClient()
+    client.models.list()
+    monkeypatch.setattr(models_resource, "codex_client_version", lambda: "0.171.0")
+    client.models.list(force_refresh=True)
+    assert client.gets[-1][1] == {"client_version": "0.171.0"}
 
 
 def test_responses_compact_sends_shared_request_fields():

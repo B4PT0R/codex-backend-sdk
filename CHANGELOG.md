@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- Discover the latest stable Codex CLI version over credential-free HTTPS for
+  model catalogs instead of sending a stale fixed version that can hide models.
+  Share a 24-hour process cache, retain a verified fallback on registry failure,
+  and allow an explicit `extra_query` version without registry access.
+- Keep catalogs fetched with custom request options out of the default cache.
+
 ## [0.5.6] - 2026-10-22
 
 ### Fixed

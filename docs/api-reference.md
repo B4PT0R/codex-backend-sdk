@@ -175,7 +175,7 @@ concurrent, turns. Backend error envelopes raise `ResponsesWebSocketError` with
 
 | Method | Parameters | Returns |
 | --- | --- | --- |
-| `client.models.list(...)` | `force_refresh=False`, `extra_headers=None`, `extra_query=None`, `extra_body=None`, `timeout=UNSET` | iterable `SyncPage` with optional `etag`; cached for 5 minutes |
+| `client.models.list(...)` | `force_refresh=False`, `extra_headers=None`, `extra_query=None`, `extra_body=None`, `timeout=UNSET` | iterable `SyncPage` with optional `etag`; default catalog cached for 5 minutes; Codex version auto-discovered over HTTPS (24-hour process cache), or pinned via `extra_query["client_version"]` |
 | `client.models.retrieve(...)` | `model`, plus the same transport controls | one typed `Model`; raises `LookupError` if absent |
 
 `Model` preserves Codex fields including display metadata, context window,

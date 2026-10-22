@@ -249,6 +249,24 @@ for model in client.models.list():
 model = client.models.retrieve("gpt-5.5")
 ```
 
+Model discovery obtains the latest stable Codex CLI version over HTTPS from the
+public npm registry; Node, npm and the Codex binary are not required. The version
+is cached for 24 hours per process, shared across clients. The lookup uses a
+separate request without backend credentials and a three-second timeout. On
+failure it keeps the last known version (or a bundled verified fallback) and
+retries no sooner than five minutes later. This only updates the advertised
+catalog version, not the SDK's implementation of backend features.
+
+To pin the catalog version and skip registry access entirely:
+
+```python
+models = client.models.list(extra_query={"client_version": "0.159.2"})
+```
+
+`force_refresh=True` bypasses the five-minute model catalog cache, not the
+24-hour version cache. Requests with explicit options do not replace the default
+catalog cache. Other protocol and application version fields are independent.
+
 ### Upload a file
 
 ```python

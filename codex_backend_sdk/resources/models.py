@@ -5,17 +5,14 @@ from __future__ import annotations
 import time
 from typing import Any, TYPE_CHECKING
 
+from .._codex_version import codex_client_version
 from .._models import Model, SyncPage
 from .._utils import _UNSET, CodexBackendUnsupportedParameterError, _is_given
 
 if TYPE_CHECKING:
     from .._client import CodexClient
 
-# This is the upstream Codex CLI protocol/client version expected by the
-# ChatGPT backend, not the PyPI package version.
-CLIENT_VERSION = "0.130.0"
 _CACHE_TTL = 300
-
 
 class Models:
     def __init__(self, client: CodexClient) -> None:
@@ -41,7 +38,9 @@ class Models:
             if time.time() - self._cache_fetched_at <= _CACHE_TTL:
                 return self._cache
 
-        params = {"client_version": CLIENT_VERSION, **(extra_query or {})}
+        params = dict(extra_query or {})
+        if "client_version" not in params:
+            params["client_version"] = codex_client_version()
         response = self._client._get_raw(
             "/models", params=params, headers=extra_headers, timeout=timeout
         )
@@ -49,8 +48,9 @@ class Models:
         models = [_model_from_backend(item) for item in data.get("models", [])]
         models.sort(key=lambda model: getattr(model, "priority", 0))
         page = SyncPage(data=models, etag=response.headers.get("ETag"))
-        self._cache = page
-        self._cache_fetched_at = time.time()
+        if not has_request_options:
+            self._cache = page
+            self._cache_fetched_at = time.time()
         return page
 
     def retrieve(

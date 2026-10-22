@@ -494,6 +494,11 @@ and does not inherit the turn token; this scope does not manage WebSockets.
 an explicit request/client header overrides it (case-insensitively). These are
 routing mechanisms, not a guarantee of a cache hit or reduced quota usage.
 
+`response.usage.input_tokens_details.cached_tokens` preserves the API's cache
+read measurement: an absent or null value is `None`, while an explicitly reported
+zero remains `0`. The SDK does not calculate cache percentages or moving averages;
+applications should exclude missing measurements from those calculations.
+
 ## Advanced transports
 
 ### Realtime voice

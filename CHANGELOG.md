@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.6] - 2026-10-22
+
+### Fixed
+- Preserve an absent or null `input_tokens_details.cached_tokens` as `None`
+  instead of inventing a zero. Explicit API-reported zero remains zero, so
+  consumers can exclude unmeasurable calls from cache statistics without
+  confusing them with measured cache misses. The SDK computes no cache rate
+  or moving average.
+
 ## [0.5.5] - 2026-10-22
 
 ### Added
